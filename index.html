@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <title>FaceLab One Tap</title>
+    <title>FaceLab Shutter</title>
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
@@ -17,15 +17,15 @@
       <main class="stage-card">
         <canvas id="stage" width="720" height="960"></canvas>
         <video id="camera" autoplay muted playsinline></video>
-        <div id="status" class="status">点中间大按钮</div>
+        <div id="status" class="status">短按拍照，长按录像</div>
       </main>
 
       <section class="auto-dock" aria-label="one-tap-controls">
-        <button id="goBtn" class="go-btn" aria-label="one-tap-shoot">🪄</button>
         <button id="addTextBtn" class="mini-btn" aria-label="add-text">➕字</button>
-        <button id="switchCameraBtn" class="mini-btn" aria-label="switch-camera">🔄</button>
-        <button id="uploadImageBtn" class="mini-btn" aria-label="import-photo">🖼️</button>
-        <button id="uploadVideoBtn" class="mini-btn" aria-label="import-video">🎞️</button>
+        <div id="shutterWrap" class="shutter-wrap" style="--progress: 0%">
+          <button id="shutterBtn" class="shutter-btn" aria-label="shutter"></button>
+        </div>
+        <button id="doneBtn" class="mini-btn done-btn" aria-label="done-save">✅完成</button>
       </section>
 
       <section class="option-card">
@@ -51,8 +51,6 @@
         <img id="resultImage" alt="result-image" />
       </section>
 
-      <input id="uploadImageInput" class="hidden-input" type="file" accept="image/*" capture="user" />
-      <input id="uploadVideoInput" class="hidden-input" type="file" accept="video/*" capture="user" />
       <a id="downloadImage" class="hidden-input" download="facelab-kids.png"></a>
       <a id="downloadVideo" class="hidden-input" download="facelab-kids.webm"></a>
     </div>
