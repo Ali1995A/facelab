@@ -42,6 +42,7 @@ const state = {
   recording: false,
   recorder: null,
   autoSaveAfterStop: false,
+  resetAfterSave: false,
   recordStartTs: 0,
   recordMaxMs: 10000,
   recordProgressRaf: 0,
@@ -810,6 +811,33 @@ function setPending(blob, type) {
   }
 }
 
+function clearResultPreview() {
+  if (els.resultVideo) {
+    els.resultVideo.pause();
+    els.resultVideo.removeAttribute("src");
+    els.resultVideo.load();
+  }
+  if (els.resultImage) {
+    els.resultImage.removeAttribute("src");
+  }
+}
+
+async function startNewCreation() {
+  state.pending = null;
+  state.postEditDirty = false;
+  state.overlays = [];
+  state.particles = [];
+  state.sourceImage = null;
+  clearSourceVideo();
+  state.sourceMode = "live";
+  clearResultPreview();
+  setStatus("🆕 新的一轮开始");
+
+  if (!state.stream || state.stream.getTracks().every((track) => track.readyState !== "live")) {
+    await startCamera();
+  }
+}
+
 async function captureCurrentImageBlob() {
   return new Promise((resolve) => {
     els.stage.toBlob(
@@ -1009,8 +1037,13 @@ async function startRecording() {
     const blob = new Blob(state.chunks, { type: mimeType || "video/webm" });
     setPending(blob, "video");
     if (state.autoSaveAfterStop) {
-      autoSaveBlob(blob, "video");
+      autoSaveBlob(blob, "video").then((saved) => {
+        if (saved && state.resetAfterSave) {
+          startNewCreation();
+        }
+      });
       state.autoSaveAfterStop = false;
+      state.resetAfterSave = false;
     } else {
       setStatus("🎬 录制完成，点✅完成保存");
     }
@@ -1075,6 +1108,7 @@ function onShutterPointerCancel(event) {
 async function onDoneClick() {
   vibrateTap();
   if (state.recording) {
+    state.resetAfterSave = true;
     stopRecording(true);
     return;
   }
@@ -1085,9 +1119,15 @@ async function onDoneClick() {
       const composed = await exportComposedVideoFromCanvas(durationSec);
       if (composed) {
         setPending(composed, "video");
-        await autoSaveBlob(composed, "video");
+        const saved = await autoSaveBlob(composed, "video");
+        if (saved) {
+          await startNewCreation();
+        }
       } else {
-        await autoSaveBlob(state.pending.blob, "video");
+        const saved = await autoSaveBlob(state.pending.blob, "video");
+        if (saved) {
+          await startNewCreation();
+        }
       }
       return;
     }
@@ -1095,16 +1135,32 @@ async function onDoneClick() {
       const composedImage = await captureCurrentImageBlob();
       if (composedImage) {
         setPending(composedImage, "image");
-        await autoSaveBlob(composedImage, "image");
+        const saved = await autoSaveBlob(composedImage, "image");
+        if (saved) {
+          await startNewCreation();
+        }
       } else {
-        await autoSaveBlob(state.pending.blob, "image");
+        const saved = await autoSaveBlob(state.pending.blob, "image");
+        if (saved) {
+          await startNewCreation();
+        }
       }
       return;
     }
-    await autoSaveBlob(state.pending.blob, state.pending.type);
+    const saved = await autoSaveBlob(state.pending.blob, state.pending.type);
+    if (saved) {
+      await startNewCreation();
+    }
     return;
   }
-  await snapPhoto(true);
+  const blob = await captureCurrentImageBlob();
+  if (blob) {
+    setPending(blob, "image");
+    const saved = await autoSaveBlob(blob, "image");
+    if (saved) {
+      await startNewCreation();
+    }
+  }
 }
 
 function getCanvasPoint(event) {
