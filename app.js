@@ -695,10 +695,21 @@ function drawSourcePixelated(source, targetWidth, targetHeight) {
     sy = Math.floor((dims.height - sh) / 2);
   }
 
+  const cameraFilter = state.lowPowerMode
+    ? "brightness(1.1) saturate(1.12) contrast(1.04)"
+    : "brightness(1.12) saturate(1.16) contrast(1.05)";
+  tinyCtx.filter = cameraFilter;
   tinyCtx.drawImage(source, sx, sy, sw, sh, 0, 0, tinyW, tinyH);
+  tinyCtx.filter = "none";
   ctx.imageSmoothingEnabled = false;
   ctx.drawImage(tinyCanvas, 0, 0, targetWidth, targetHeight);
   ctx.imageSmoothingEnabled = true;
+
+  // Warm lift pass to reduce gray cast while keeping cartoon look.
+  ctx.fillStyle = state.lowPowerMode ? "rgba(255, 225, 195, 0.075)" : "rgba(255, 225, 195, 0.09)";
+  ctx.fillRect(0, 0, targetWidth, targetHeight);
+  ctx.fillStyle = "rgba(255,255,255,0.03)";
+  ctx.fillRect(0, 0, targetWidth, targetHeight);
   return true;
 }
 
@@ -725,13 +736,13 @@ function render(ts = 0) {
 
   const w = els.stage.width;
   const h = els.stage.height;
-  ctx.fillStyle = "#a9c0dc";
+  ctx.fillStyle = "#b8d3ec";
   ctx.fillRect(0, 0, w, h);
 
   const source = resolveRenderSource();
   const drawn = source ? drawSourcePixelated(source, w, h) : false;
   if (!drawn) {
-    ctx.fillStyle = "#90a8c4";
+    ctx.fillStyle = "#a7c4df";
     ctx.fillRect(0, 0, w, h);
   }
 
