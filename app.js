@@ -27,7 +27,7 @@ const secureLike =
   location.hostname === "127.0.0.1";
 
 const stickerPhrases = ["哇哦", "冲呀", "太可爱啦", "耶", "嘻嘻", "我最棒", "开心到飞起", "biu biu"];
-const pixelLevels = [6, 8, 10, 12];
+const pixelLevels = [2, 3, 4, 5];
 const textStyles = ["classic", "neon", "fire", "candy", "shake"];
 const fxStyles = ["none", "spark", "heart", "glitch", "confetti", "speed"];
 
@@ -76,7 +76,7 @@ const state = {
 
 state.iPadChrome = state.iPad && state.isChromeIOS;
 if (state.iPad) {
-  state.pixelIndex = 2;
+  state.pixelIndex = 1;
 }
 
 const ctx = els.stage.getContext("2d", { alpha: false, desynchronized: true });
@@ -557,9 +557,10 @@ function getSourceDimensions(source) {
 function drawSourcePixelated(source, targetWidth, targetHeight) {
   const dims = getSourceDimensions(source);
   if (!dims) return false;
-  const pixel = pixelLevels[state.pixelIndex];
-  const tinyW = Math.max(18, Math.floor(targetWidth / pixel));
-  const tinyH = Math.max(24, Math.floor(targetHeight / pixel));
+  const basePixel = pixelLevels[state.pixelIndex];
+  const previewPixel = state.iPad ? Math.max(1.8, basePixel * 0.85) : Math.max(1.6, basePixel * 0.8);
+  const tinyW = Math.max(24, Math.floor(targetWidth / previewPixel));
+  const tinyH = Math.max(32, Math.floor(targetHeight / previewPixel));
   if (tinyCanvas.width !== tinyW || tinyCanvas.height !== tinyH) {
     tinyCanvas.width = tinyW;
     tinyCanvas.height = tinyH;
@@ -862,7 +863,6 @@ async function oneTapCreate() {
     return;
   }
 
-  state.pixelIndex = (state.pixelIndex + 1) % pixelLevels.length;
   addFloatingText(pick(stickerPhrases), { source: "manual", sticky: true, styleId: state.textStyleId });
   ensureSpeechPassive();
   await recordClipAndSave();
