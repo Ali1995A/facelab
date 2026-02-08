@@ -17,13 +17,18 @@
       <header class="topbar">
         <h1>FaceLab Meme Cam</h1>
         <p>前置自拍 · 像素风 · 语音漂浮字幕 · 几秒生成表情包</p>
+        <div id="envHint" class="env-hint"></div>
       </header>
 
       <section class="panel controls">
         <button id="startCameraBtn" class="btn primary">启动摄像头</button>
         <button id="switchCameraBtn" class="btn">切换前/后摄像头</button>
         <button id="snapBtn" class="btn">拍照</button>
+        <button id="uploadImageBtn" class="btn">微信拍照导入</button>
+        <button id="uploadVideoBtn" class="btn">微信录像导入</button>
         <button id="clearBtn" class="btn">清空文字</button>
+        <input id="uploadImageInput" class="hidden-input" type="file" accept="image/*" capture="user" />
+        <input id="uploadVideoInput" class="hidden-input" type="file" accept="video/*" capture="user" />
 
         <label class="field">
           <span>像素强度</span>
@@ -54,6 +59,11 @@
         </label>
 
         <button id="speechBtn" class="btn">开启语音转字幕</button>
+        <label class="field">
+          <span>手动文字（语音不可用时）</span>
+          <input id="manualTextInput" type="text" maxlength="24" placeholder="输入一句，点击添加" />
+        </label>
+        <button id="manualTextBtn" class="btn">手动添加文字</button>
 
         <label class="field">
           <span>录制时长（秒）</span>

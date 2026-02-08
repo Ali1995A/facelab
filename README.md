@@ -8,6 +8,7 @@
 - 即时语音识别并生成漂浮字幕
 - 录制数秒短视频并导出（表情包）
 - iPad Pro 一代性能优化
+- 微信内浏览器兼容模式（拍照导入 / 录像导入）
 
 ## 本地运行
 
@@ -42,3 +43,4 @@ git push -u origin main
 - 语音识别依赖 `SpeechRecognition / webkitSpeechRecognition`（Safari 与 Chrome 支持情况不同）
 - 视频录制依赖 `MediaRecorder`，会自动选择可用编码（`mp4` 或 `webm`）
 - iPad 保存：可长按预览视频后选择“存储到照片”
+- 微信内浏览器：若实时摄像头受限，可使用“微信拍照导入 / 微信录像导入”继续制作

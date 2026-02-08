@@ -49,6 +49,17 @@ body {
   font-size: 14px;
 }
 
+.env-hint {
+  margin-top: 8px;
+  display: inline-block;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(158, 200, 234, 0.4);
+  background: rgba(0, 0, 0, 0.25);
+  color: #d7ecff;
+  font-size: 12px;
+}
+
 .panel {
   border: 1px solid var(--line);
   border-radius: 16px;
@@ -76,6 +87,14 @@ body {
 .field input,
 .field select {
   width: 100%;
+}
+
+.hidden-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
 }
 
 .btn {
