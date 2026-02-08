@@ -892,6 +892,17 @@ function bindEvents() {
 
   bindOptionSelections();
 
+  document.addEventListener("contextmenu", (event) => {
+    if (event.target instanceof Element && event.target.closest(".app-shell")) {
+      event.preventDefault();
+    }
+  });
+  document.addEventListener("selectstart", (event) => {
+    if (event.target instanceof Element && event.target.closest(".app-shell")) {
+      event.preventDefault();
+    }
+  });
+
   window.addEventListener("resize", fitStage, { passive: true });
   window.addEventListener("orientationchange", () => {
     updateLayoutMode();
