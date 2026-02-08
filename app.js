@@ -658,21 +658,6 @@ function drawSpeedLines() {
   ctx.globalAlpha = 1;
 }
 
-function drawRecordHUD() {
-  if (!state.recording) return;
-  const remain = Math.max(0, Math.ceil((state.recordMaxMs - (Date.now() - state.recordStartTs)) / 1000));
-  ctx.fillStyle = "rgba(255,255,255,0.72)";
-  ctx.fillRect(12, 12, 122, 36);
-  ctx.fillStyle = "#18a54d";
-  ctx.beginPath();
-  ctx.arc(28, 30, 7, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = "#1f3f63";
-  ctx.font = "700 16px SF Pro Rounded,sans-serif";
-  ctx.textAlign = "left";
-  ctx.fillText(`录制 ${remain}s`, 42, 35);
-}
-
 function getSourceDimensions(source) {
   if (!source) return null;
   if ("videoWidth" in source && source.videoWidth > 0) {
@@ -760,7 +745,6 @@ function render(ts = 0) {
   drawOverlays();
   drawGlitchLines();
   drawSpeedLines();
-  drawRecordHUD();
 
   state.renderId = window.requestAnimationFrame(render);
 }
