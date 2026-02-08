@@ -293,16 +293,16 @@ function addPresetText() {
 }
 
 function emitBurst(x, y, color) {
-  for (let i = 0; i < 14; i += 1) {
+  for (let i = 0; i < 24; i += 1) {
     state.particles.push({
       shape: "spark",
       x,
       y,
-      vx: rand(-1.8, 1.8),
-      vy: rand(-1.8, 1.8),
-      size: rand(1.4, 3.2),
+      vx: rand(-2.6, 2.6),
+      vy: rand(-2.6, 2.6),
+      size: rand(1.8, 4.2),
       life: 0,
-      maxLife: rand(20, 50),
+      maxLife: rand(24, 68),
       color,
       rotation: 0,
       vr: 0,
@@ -313,56 +313,65 @@ function emitBurst(x, y, color) {
 function emitEffect() {
   if (state.effectId === "none") return;
 
-  if (state.effectId === "spark" && Math.random() < 0.65) {
-    state.particles.push({
-      shape: "spark",
-      x: rand(0, els.stage.width),
-      y: rand(0, els.stage.height),
-      vx: rand(-0.2, 0.2),
-      vy: rand(-0.8, -0.1),
-      size: rand(0.8, 2.2),
-      life: 0,
-      maxLife: rand(25, 80),
-      color: pick(["#7dd3ff", "#ffffff", "#9de3d5"]),
-      rotation: 0,
-      vr: 0,
-    });
+  if (state.effectId === "spark" && Math.random() < 0.9) {
+    const spawn = Math.random() < 0.55 ? 3 : 2;
+    for (let i = 0; i < spawn; i += 1) {
+      state.particles.push({
+        shape: Math.random() < 0.35 ? "star" : "spark",
+        x: rand(0, els.stage.width),
+        y: rand(0, els.stage.height),
+        vx: rand(-0.9, 0.9),
+        vy: rand(-1.6, -0.1),
+        size: rand(1.8, 5.4),
+        life: 0,
+        maxLife: rand(38, 110),
+        color: pick(["#7dd3ff", "#ffffff", "#9de3d5", "#ffd166"]),
+        rotation: rand(0, Math.PI * 2),
+        vr: rand(-0.12, 0.12),
+      });
+    }
   }
 
-  if (state.effectId === "heart" && Math.random() < 0.35) {
-    state.particles.push({
-      shape: "heart",
-      x: rand(30, els.stage.width - 30),
-      y: els.stage.height + 8,
-      vx: rand(-0.5, 0.5),
-      vy: rand(-1.6, -0.8),
-      size: rand(12, 20),
-      life: 0,
-      maxLife: rand(70, 130),
-      color: pick(["#ff8ba7", "#fda4af", "#fecdd3"]),
-      rotation: 0,
-      vr: 0,
-    });
+  if (state.effectId === "heart" && Math.random() < 0.6) {
+    const spawn = Math.random() < 0.5 ? 2 : 1;
+    for (let i = 0; i < spawn; i += 1) {
+      state.particles.push({
+        shape: "heart",
+        x: rand(20, els.stage.width - 20),
+        y: els.stage.height + 10,
+        vx: rand(-0.8, 0.8),
+        vy: rand(-2.5, -1.1),
+        size: rand(16, 30),
+        life: 0,
+        maxLife: rand(90, 180),
+        color: pick(["#ff4d8f", "#ff7aa8", "#ffc4d8", "#ff5f7f"]),
+        rotation: 0,
+        vr: 0,
+      });
+    }
   }
 
-  if (state.effectId === "confetti" && Math.random() < 0.55) {
-    state.particles.push({
-      shape: "confetti",
-      x: rand(0, els.stage.width),
-      y: -10,
-      vx: rand(-0.9, 0.9),
-      vy: rand(1.4, 2.8),
-      size: rand(4, 8),
-      life: 0,
-      maxLife: rand(60, 130),
-      color: pick(["#ffd166", "#06d6a0", "#118ab2", "#ef476f", "#8ecae6"]),
-      rotation: rand(0, Math.PI * 2),
-      vr: rand(-0.16, 0.16),
-    });
+  if (state.effectId === "confetti" && Math.random() < 0.82) {
+    const spawn = Math.random() < 0.5 ? 3 : 2;
+    for (let i = 0; i < spawn; i += 1) {
+      state.particles.push({
+        shape: Math.random() < 0.25 ? "star" : "confetti",
+        x: rand(0, els.stage.width),
+        y: -10,
+        vx: rand(-1.2, 1.2),
+        vy: rand(1.8, 3.6),
+        size: rand(6, 12),
+        life: 0,
+        maxLife: rand(90, 180),
+        color: pick(["#ffd166", "#06d6a0", "#118ab2", "#ef476f", "#8ecae6", "#ff7f50"]),
+        rotation: rand(0, Math.PI * 2),
+        vr: rand(-0.22, 0.22),
+      });
+    }
   }
 
-  if (state.particles.length > 320) {
-    state.particles.splice(0, state.particles.length - 320);
+  if (state.particles.length > 640) {
+    state.particles.splice(0, state.particles.length - 640);
   }
 }
 
@@ -380,12 +389,20 @@ function drawParticles() {
       ctx.fillStyle = p.color;
       ctx.font = `${p.size}px sans-serif`;
       ctx.fillText("❤", p.x, p.y);
+    } else if (p.shape === "star") {
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate(p.rotation);
+      ctx.fillStyle = p.color;
+      ctx.font = `${Math.max(10, p.size * 2)}px sans-serif`;
+      ctx.fillText("✦", -p.size, p.size);
+      ctx.restore();
     } else if (p.shape === "confetti") {
       ctx.save();
       ctx.translate(p.x, p.y);
       ctx.rotate(p.rotation);
       ctx.fillStyle = p.color;
-      ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 0.6);
+      ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 0.74);
       ctx.restore();
     } else {
       ctx.fillStyle = p.color;
@@ -476,28 +493,29 @@ function drawOverlays() {
 
 function drawGlitchLines() {
   if (state.effectId !== "glitch") return;
-  for (let i = 0; i < 4; i += 1) {
-    if (Math.random() < 0.45) {
+  for (let i = 0; i < 10; i += 1) {
+    if (Math.random() < 0.8) {
       const y = rand(0, els.stage.height);
-      const h = rand(3, 10);
-      ctx.fillStyle = `rgba(${Math.floor(rand(120, 255))},${Math.floor(rand(120, 255))},255,0.22)`;
-      ctx.fillRect(0, y, els.stage.width, h);
+      const h = rand(4, 16);
+      const xShift = rand(-20, 20);
+      ctx.fillStyle = `rgba(${Math.floor(rand(120, 255))},${Math.floor(rand(60, 255))},255,0.34)`;
+      ctx.fillRect(xShift, y, els.stage.width, h);
     }
   }
 }
 
 function drawSpeedLines() {
   if (state.effectId !== "speed") return;
-  ctx.globalAlpha = 0.22;
-  ctx.strokeStyle = "rgba(255,255,255,0.9)";
-  ctx.lineWidth = 2;
-  for (let i = 0; i < 18; i += 1) {
+  ctx.globalAlpha = 0.34;
+  for (let i = 0; i < 34; i += 1) {
+    ctx.strokeStyle = Math.random() < 0.25 ? "rgba(255,236,163,0.95)" : "rgba(255,255,255,0.95)";
+    ctx.lineWidth = rand(1.4, 4.2);
     const y = rand(0, els.stage.height);
-    const len = rand(50, 180);
-    const startX = rand(-80, els.stage.width);
+    const len = rand(90, 260);
+    const startX = rand(-120, els.stage.width);
     ctx.beginPath();
     ctx.moveTo(startX, y);
-    ctx.lineTo(startX + len, y + rand(-8, 8));
+    ctx.lineTo(startX + len, y + rand(-14, 14));
     ctx.stroke();
   }
   ctx.globalAlpha = 1;

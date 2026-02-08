@@ -252,7 +252,7 @@ body {
 
 .option-card {
   margin-top: 10px;
-  padding: 10px;
+  padding: 14px;
   border-radius: var(--radius);
   border: 1px solid var(--glass-border);
   background: var(--glass);
@@ -261,9 +261,9 @@ body {
 
 .option-row {
   display: flex;
-  gap: 8px;
+  gap: 10px;
   overflow-x: auto;
-  padding-bottom: 4px;
+  padding-bottom: 6px;
 }
 
 .option-row + .option-row {
@@ -278,7 +278,7 @@ body {
   color: var(--ink);
   border-radius: 999px;
   min-height: 38px;
-  padding: 0 14px;
+  padding: 0 15px;
   font-size: 14px;
   font-weight: 700;
   white-space: nowrap;
@@ -293,6 +293,17 @@ body {
     transform 120ms ease,
     background 160ms ease,
     box-shadow 160ms ease;
+}
+
+#effectOptions .opt-btn {
+  min-height: 48px;
+  padding: 0 18px;
+  font-size: 16px;
+  border-radius: 14px;
+}
+
+#effectOptions {
+  padding-bottom: 8px;
 }
 
 .opt-btn.active {
@@ -360,6 +371,11 @@ body {
     font-size: 13px;
     padding: 0 12px;
   }
+  #effectOptions .opt-btn {
+    min-height: 42px;
+    padding: 0 14px;
+    font-size: 14px;
+  }
 }
 
 @media (orientation: landscape) and (min-width: 900px) {
@@ -419,7 +435,7 @@ body {
   body.ipad-landscape .option-card {
     grid-area: options;
     margin-top: 0;
-    padding: 8px;
+    padding: 10px;
   }
 
   body.ipad-landscape .option-row {
@@ -430,6 +446,11 @@ body {
     min-height: 34px;
     padding: 0 10px;
     font-size: 12px;
+  }
+  body.ipad-landscape #effectOptions .opt-btn {
+    min-height: 38px;
+    padding: 0 11px;
+    font-size: 13px;
   }
 
   body.ipad-landscape #resultVideo,
