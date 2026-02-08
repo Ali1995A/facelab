@@ -1,4 +1,5 @@
 const els = {
+  flowState: document.getElementById("flowState"),
   shutterWrap: document.getElementById("shutterWrap"),
   shutterBtn: document.getElementById("shutterBtn"),
   addTextBtn: document.getElementById("addTextBtn"),
@@ -26,7 +27,11 @@ const stickerPhrases = ["哇哦", "冲呀", "太可爱啦", "耶", "嘻嘻", "�
 const pixelLevels = [2, 3, 4, 5];
 const textStyles = ["classic", "neon", "fire", "candy", "shake"];
 const fxStyles = ["none", "spark", "heart", "glitch", "confetti", "speed"];
+const flowSteps = ["capture", "recording", "edit", "saved"];
 const isIpadChrome = (/iPad/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)) && /crios/.test(lowUA);
+const flowStepEls = new Map(
+  Array.from(els.flowState?.querySelectorAll("[data-step]") || []).map((node) => [node.getAttribute("data-step"), node])
+);
 
 const state = {
   facingMode: "user",
@@ -56,6 +61,11 @@ const state = {
   imageUrl: null,
   pending: null,
   postEditDirty: false,
+  uiMode: "capture",
+  flowStep: "capture",
+  recordingLocked: false,
+  saving: false,
+  layoutFreezeUntil: 0,
   micStream: null,
   micRequested: false,
   iPad: /iPad/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1),
@@ -84,22 +94,22 @@ const state = {
 
 state.performance = state.lowPowerMode
   ? {
-      targetFps: 24,
-      maxParticles: 220,
-      burstCount: 10,
+      targetFps: 20,
+      maxParticles: 150,
+      burstCount: 8,
       sparkSpawnMax: 1,
       confettiSpawnMax: 1,
       glitchLines: 4,
-      speedLines: 12,
-      scanlineStep: 7,
+      speedLines: 8,
+      scanlineStep: 9,
       resizeDebounceMs: 180,
-      exportCaptureFps: 18,
+      exportCaptureFps: 16,
       exportBitrate: 1150000,
       composeBitrate: 1050000,
       maxStageWidthPortrait: 560,
       maxStageWidthLandscape: 660,
       imageBlobType: "image/jpeg",
-      imageBlobQuality: 0.9,
+      imageBlobQuality: 0.88,
     }
   : {
       targetFps: 30,
@@ -121,7 +131,7 @@ state.performance = state.lowPowerMode
     };
 
 if (state.iPad) {
-  state.pixelIndex = 1;
+  state.pixelIndex = 0;
 }
 
 const ctx = els.stage.getContext("2d", { alpha: false, desynchronized: true });
@@ -143,6 +153,44 @@ function pick(arr) {
 function setStatus(text, mode = "ok") {
   els.status.textContent = text;
   els.status.style.color = mode === "error" ? "#c1382c" : "#2b4968";
+}
+
+function setUiMode(mode, flowStep = mode) {
+  state.uiMode = mode;
+  state.flowStep = flowSteps.includes(flowStep) ? flowStep : "capture";
+  document.body.dataset.uiMode = state.uiMode;
+
+  const activeIndex = flowSteps.indexOf(state.flowStep);
+  flowSteps.forEach((step, index) => {
+    const node = flowStepEls.get(step);
+    if (!node) return;
+    node.classList.toggle("active", index === activeIndex);
+    node.classList.toggle("done", index < activeIndex);
+  });
+}
+
+function waitMs(ms) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+function setSavingBusy(on) {
+  state.saving = on;
+  if (on) {
+    state.layoutFreezeUntil = performance.now() + 700;
+  }
+  [els.shutterBtn, els.addTextBtn, els.doneBtn].forEach((button) => {
+    if (button) {
+      button.disabled = on;
+    }
+  });
+}
+
+async function finalizeSaveAndReset(saved) {
+  if (!saved) return false;
+  setUiMode("saved", "saved");
+  await waitMs(260);
+  await startNewCreation();
+  return true;
 }
 
 function setShutterProgress(value0to1) {
@@ -180,6 +228,7 @@ function scheduleFitStage() {
   if (fitStageTimer) {
     window.clearTimeout(fitStageTimer);
   }
+  state.layoutFreezeUntil = performance.now() + state.performance.resizeDebounceMs + 220;
   fitStageTimer = window.setTimeout(() => {
     fitStage();
     if (state.lowPowerMode) {
@@ -673,7 +722,7 @@ function drawSourcePixelated(source, targetWidth, targetHeight) {
   const dims = getSourceDimensions(source);
   if (!dims) return false;
   const basePixel = pixelLevels[state.pixelIndex];
-  const previewPixel = state.iPad ? Math.max(1.8, basePixel * 0.85) : Math.max(1.6, basePixel * 0.8);
+  const previewPixel = state.iPad ? Math.max(1.45, basePixel * 0.68) : Math.max(1.5, basePixel * 0.76);
   const tinyW = Math.max(24, Math.floor(targetWidth / previewPixel));
   const tinyH = Math.max(32, Math.floor(targetHeight / previewPixel));
   if (tinyCanvas.width !== tinyW || tinyCanvas.height !== tinyH) {
@@ -696,8 +745,8 @@ function drawSourcePixelated(source, targetWidth, targetHeight) {
   }
 
   const cameraFilter = state.lowPowerMode
-    ? "brightness(1.1) saturate(1.12) contrast(1.04)"
-    : "brightness(1.12) saturate(1.16) contrast(1.05)";
+    ? "brightness(1.13) saturate(1.18) contrast(1.06)"
+    : "brightness(1.14) saturate(1.2) contrast(1.06)";
   tinyCtx.filter = cameraFilter;
   tinyCtx.drawImage(source, sx, sy, sw, sh, 0, 0, tinyW, tinyH);
   tinyCtx.filter = "none";
@@ -706,9 +755,9 @@ function drawSourcePixelated(source, targetWidth, targetHeight) {
   ctx.imageSmoothingEnabled = true;
 
   // Warm lift pass to reduce gray cast while keeping cartoon look.
-  ctx.fillStyle = state.lowPowerMode ? "rgba(255, 225, 195, 0.075)" : "rgba(255, 225, 195, 0.09)";
+  ctx.fillStyle = state.lowPowerMode ? "rgba(255, 223, 190, 0.09)" : "rgba(255, 223, 190, 0.1)";
   ctx.fillRect(0, 0, targetWidth, targetHeight);
-  ctx.fillStyle = "rgba(255,255,255,0.03)";
+  ctx.fillStyle = "rgba(255,255,255,0.04)";
   ctx.fillRect(0, 0, targetWidth, targetHeight);
   return true;
 }
@@ -744,6 +793,13 @@ function render(ts = 0) {
   if (!drawn) {
     ctx.fillStyle = "#a7c4df";
     ctx.fillRect(0, 0, w, h);
+  }
+
+  const lightFrame = state.saving || performance.now() < state.layoutFreezeUntil;
+  if (lightFrame) {
+    drawOverlays();
+    state.renderId = window.requestAnimationFrame(render);
+    return;
   }
 
   for (let y = 0; y < h; y += state.performance.scanlineStep) {
@@ -792,6 +848,7 @@ function cleanupMediaUrls() {
 function setPending(blob, type) {
   state.pending = { blob, type };
   state.postEditDirty = false;
+  setUiMode("edit", "edit");
   if (type === "video") {
     if (state.mediaUrl) URL.revokeObjectURL(state.mediaUrl);
     state.mediaUrl = URL.createObjectURL(blob);
@@ -818,6 +875,7 @@ function clearResultPreview() {
 }
 
 async function startNewCreation() {
+  setSavingBusy(false);
   state.pending = null;
   state.postEditDirty = false;
   state.overlays = [];
@@ -825,6 +883,10 @@ async function startNewCreation() {
   state.sourceImage = null;
   clearSourceVideo();
   state.sourceMode = "live";
+  state.recordingLocked = false;
+  setShutterProgress(0);
+  els.shutterWrap.classList.remove("recording", "locked");
+  setUiMode("capture", "capture");
   clearResultPreview();
   setStatus("🆕 新的一轮开始");
 
@@ -844,6 +906,7 @@ async function captureCurrentImageBlob() {
 }
 
 async function autoSaveBlob(blob, type) {
+  setSavingBusy(true);
   const isVideo = type === "video";
   const ts = Date.now();
   const ext = isVideo ? (blob.type.includes("mp4") ? "mp4" : "webm") : blob.type.includes("jpeg") ? "jpg" : "png";
@@ -859,31 +922,35 @@ async function autoSaveBlob(blob, type) {
   }
 
   const file = new File([blob], fileName, { type: mime });
-  if (navigator.share) {
-    try {
-      if (!navigator.canShare || navigator.canShare({ files: [file] })) {
-        await navigator.share({
-          files: [file],
-          title: "FaceLab",
-          text: "保存到相册",
-        });
-        setStatus("✅ 已弹出保存面板");
-        return true;
-      }
-    } catch (error) {
-      console.warn("share failed", error);
-    }
-  }
-
   try {
-    const link = isVideo ? els.downloadVideo : els.downloadImage;
-    link.click();
-    setStatus("✅ 已自动下载");
-    return true;
-  } catch (error) {
-    console.warn("download click failed", error);
-    setStatus("✅ 请长按预览存相册");
-    return false;
+    if (navigator.share) {
+      try {
+        if (!navigator.canShare || navigator.canShare({ files: [file] })) {
+          await navigator.share({
+            files: [file],
+            title: "FaceLab",
+            text: "保存到相册",
+          });
+          setStatus("✅ 已弹出保存面板");
+          return true;
+        }
+      } catch (error) {
+        console.warn("share failed", error);
+      }
+    }
+
+    try {
+      const link = isVideo ? els.downloadVideo : els.downloadImage;
+      link.click();
+      setStatus("✅ 已自动下载");
+      return true;
+    } catch (error) {
+      console.warn("download click failed", error);
+      setStatus("✅ 请长按预览存相册");
+      return false;
+    }
+  } finally {
+    setSavingBusy(false);
   }
 }
 
@@ -983,7 +1050,7 @@ function runRecordProgressLoop() {
   state.recordProgressRaf = requestAnimationFrame(tick);
 }
 
-async function startRecording() {
+async function startRecording({ locked = false } = {}) {
   if (state.recording) return;
   if (!state.supportRecorder || !state.supportCaptureStream) {
     setStatus("⚠️ 当前浏览器不支持录像", "error");
@@ -1016,8 +1083,11 @@ async function startRecording() {
   state.chunks = [];
   state.recorder = recorder;
   state.recording = true;
+  state.recordingLocked = locked;
   state.recordStartTs = Date.now();
   els.shutterWrap.classList.add("recording");
+  els.shutterWrap.classList.toggle("locked", state.recordingLocked);
+  setUiMode("recording", "recording");
   setStatus("🔴 录制中，可继续选特效");
   setShutterProgress(0);
   runRecordProgressLoop();
@@ -1032,13 +1102,14 @@ async function startRecording() {
     const blob = new Blob(state.chunks, { type: mimeType || "video/webm" });
     setPending(blob, "video");
     if (state.autoSaveAfterStop) {
-      autoSaveBlob(blob, "video").then((saved) => {
-        if (saved && state.resetAfterSave) {
-          startNewCreation();
-        }
-      });
+      const shouldReset = state.resetAfterSave;
       state.autoSaveAfterStop = false;
       state.resetAfterSave = false;
+      autoSaveBlob(blob, "video").then((saved) => {
+        if (saved && shouldReset) {
+          finalizeSaveAndReset(true);
+        }
+      });
     } else {
       setStatus("🎬 录制完成，点✅完成保存");
     }
@@ -1053,9 +1124,10 @@ function stopRecording(saveImmediately) {
   if (!state.recording) return;
   state.autoSaveAfterStop = saveImmediately;
   state.recording = false;
+  state.recordingLocked = false;
   stopRecordProgressLoop();
   setShutterProgress(0);
-  els.shutterWrap.classList.remove("recording");
+  els.shutterWrap.classList.remove("recording", "locked");
   if (state.recorder && state.recorder.state !== "inactive") {
     state.recorder.stop();
   }
@@ -1063,6 +1135,7 @@ function stopRecording(saveImmediately) {
 
 function onShutterPointerDown(event) {
   event.preventDefault();
+  if (state.recording || state.saving) return;
   vibrateTap();
   if (state.press.active) return;
   state.press.active = true;
@@ -1072,7 +1145,7 @@ function onShutterPointerDown(event) {
   state.press.timer = window.setTimeout(async () => {
     if (!state.press.active) return;
     state.press.longTriggered = true;
-    await startRecording();
+    await startRecording({ locked: true });
   }, 320);
 }
 
@@ -1080,9 +1153,10 @@ function onShutterPointerUp(event) {
   if (!state.press.active || state.press.pointerId !== event.pointerId) return;
   clearTimeout(state.press.timer);
   if (state.press.longTriggered) {
-    if (state.recording) {
-      stopRecording(false);
-    }
+    state.press.active = false;
+    state.press.pointerId = null;
+    state.press.longTriggered = false;
+    return;
   } else {
     snapPhoto(false);
   }
@@ -1094,7 +1168,7 @@ function onShutterPointerUp(event) {
 function onShutterPointerCancel(event) {
   if (!state.press.active || state.press.pointerId !== event.pointerId) return;
   clearTimeout(state.press.timer);
-  if (state.recording) stopRecording(false);
+  if (state.recording && !state.recordingLocked) stopRecording(false);
   state.press.active = false;
   state.press.pointerId = null;
   state.press.longTriggered = false;
@@ -1104,6 +1178,7 @@ async function onDoneClick() {
   vibrateTap();
   if (state.recording) {
     state.resetAfterSave = true;
+    setStatus("⏹️ 正在结束并保存");
     stopRecording(true);
     return;
   }
@@ -1115,14 +1190,10 @@ async function onDoneClick() {
       if (composed) {
         setPending(composed, "video");
         const saved = await autoSaveBlob(composed, "video");
-        if (saved) {
-          await startNewCreation();
-        }
+        await finalizeSaveAndReset(saved);
       } else {
         const saved = await autoSaveBlob(state.pending.blob, "video");
-        if (saved) {
-          await startNewCreation();
-        }
+        await finalizeSaveAndReset(saved);
       }
       return;
     }
@@ -1131,30 +1202,22 @@ async function onDoneClick() {
       if (composedImage) {
         setPending(composedImage, "image");
         const saved = await autoSaveBlob(composedImage, "image");
-        if (saved) {
-          await startNewCreation();
-        }
+        await finalizeSaveAndReset(saved);
       } else {
         const saved = await autoSaveBlob(state.pending.blob, "image");
-        if (saved) {
-          await startNewCreation();
-        }
+        await finalizeSaveAndReset(saved);
       }
       return;
     }
     const saved = await autoSaveBlob(state.pending.blob, state.pending.type);
-    if (saved) {
-      await startNewCreation();
-    }
+    await finalizeSaveAndReset(saved);
     return;
   }
   const blob = await captureCurrentImageBlob();
   if (blob) {
     setPending(blob, "image");
     const saved = await autoSaveBlob(blob, "image");
-    if (saved) {
-      await startNewCreation();
-    }
+    await finalizeSaveAndReset(saved);
   }
 }
 
@@ -1244,6 +1307,7 @@ function bindEvents() {
   window.addEventListener("resize", scheduleFitStage, { passive: true });
   window.addEventListener("orientationchange", () => {
     updateLayoutMode();
+    state.layoutFreezeUntil = performance.now() + 320;
     state.lastRenderTs = 0;
     scheduleFitStage();
   });
@@ -1265,6 +1329,7 @@ function bindEvents() {
 }
 
 async function bootstrap() {
+  setUiMode("capture", "capture");
   updateLayoutMode();
   fitStage();
   refreshHint();

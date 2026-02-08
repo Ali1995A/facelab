@@ -47,7 +47,8 @@ body {
 .hero {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
+  flex-wrap: wrap;
   margin-bottom: 10px;
 }
 
@@ -64,6 +65,38 @@ body {
 .hero h1 {
   margin: 0;
   font-size: clamp(30px, 7vw, 48px);
+}
+
+.flow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 2px;
+}
+
+.flow span {
+  min-width: 46px;
+  min-height: 26px;
+  padding: 0 8px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 800;
+  color: #5b7a99;
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.96);
+}
+
+.flow span.active {
+  color: #12324e;
+  background: linear-gradient(145deg, #fff2ad, #ffcc88);
+}
+
+.flow span.done {
+  color: #166437;
+  background: linear-gradient(145deg, #d9ffe9, #9ef3c5);
 }
 
 .hint {
@@ -120,6 +153,7 @@ body {
   grid-template-columns: minmax(96px, 130px) 1fr minmax(96px, 130px);
   align-items: center;
   gap: 10px;
+  transition: all 160ms ease;
 }
 
 .mini-btn {
@@ -190,8 +224,8 @@ body {
 
 .shutter-wrap {
   justify-self: center;
-  width: 116px;
-  height: 116px;
+  width: 132px;
+  height: 132px;
   border-radius: 999px;
   position: relative;
   display: grid;
@@ -204,6 +238,23 @@ body {
 
 .shutter-wrap.recording {
   animation: pulseRecord 800ms ease-in-out infinite;
+  box-shadow:
+    0 0 0 5px rgba(54, 201, 106, 0.22),
+    0 12px 24px rgba(64, 117, 168, 0.24);
+}
+
+.shutter-wrap.locked::after {
+  content: "REC";
+  position: absolute;
+  top: -8px;
+  right: -6px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 900;
+  color: #fff;
+  background: #ff5a45;
+  border: 1px solid rgba(255, 255, 255, 0.95);
 }
 
 .shutter-wrap.recording .shutter-btn {
@@ -213,8 +264,8 @@ body {
 }
 
 .shutter-btn {
-  width: 82px;
-  height: 82px;
+  width: 94px;
+  height: 94px;
   border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 1);
   background:
@@ -257,6 +308,34 @@ body {
   border: 1px solid var(--glass-border);
   background: var(--glass);
   box-shadow: var(--shadow);
+}
+
+body[data-ui-mode="capture"] .option-card,
+body[data-ui-mode="capture"] .result-card,
+body[data-ui-mode="capture"] #addTextBtn,
+body[data-ui-mode="capture"] #doneBtn {
+  display: none;
+}
+
+body[data-ui-mode="capture"] .auto-dock {
+  grid-template-columns: 1fr;
+  justify-items: center;
+}
+
+body[data-ui-mode="recording"] .result-card {
+  display: none;
+}
+
+body[data-ui-mode="saved"] .option-card,
+body[data-ui-mode="saved"] .result-card,
+body[data-ui-mode="saved"] #addTextBtn,
+body[data-ui-mode="saved"] #doneBtn {
+  display: none;
+}
+
+body[data-ui-mode="saved"] .auto-dock {
+  grid-template-columns: 1fr;
+  justify-items: center;
 }
 
 .option-row {
@@ -356,12 +435,12 @@ body {
     font-size: 21px;
   }
   .shutter-wrap {
-    width: 102px;
-    height: 102px;
+    width: 114px;
+    height: 114px;
   }
   .shutter-btn {
-    width: 72px;
-    height: 72px;
+    width: 82px;
+    height: 82px;
   }
   .result-card {
     grid-template-columns: 1fr;
@@ -375,6 +454,14 @@ body {
     min-height: 42px;
     padding: 0 14px;
     font-size: 14px;
+  }
+  .flow {
+    width: 100%;
+    order: 10;
+  }
+  .flow span {
+    flex: 1;
+    min-width: 0;
   }
 }
 
@@ -416,13 +503,13 @@ body {
   }
 
   body.ipad-landscape .shutter-wrap {
-    width: 110px;
-    height: 110px;
+    width: 118px;
+    height: 118px;
   }
 
   body.ipad-landscape .shutter-btn {
-    width: 78px;
-    height: 78px;
+    width: 86px;
+    height: 86px;
   }
 
   body.ipad-landscape .result-card {
@@ -435,7 +522,7 @@ body {
   body.ipad-landscape .option-card {
     grid-area: options;
     margin-top: 0;
-    padding: 10px;
+    padding: 12px;
   }
 
   body.ipad-landscape .option-row {
@@ -448,9 +535,9 @@ body {
     font-size: 12px;
   }
   body.ipad-landscape #effectOptions .opt-btn {
-    min-height: 38px;
-    padding: 0 11px;
-    font-size: 13px;
+    min-height: 44px;
+    padding: 0 13px;
+    font-size: 14px;
   }
 
   body.ipad-landscape #resultVideo,
