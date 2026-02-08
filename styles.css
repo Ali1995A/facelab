@@ -201,3 +201,61 @@ body {
     grid-template-columns: 1fr;
   }
 }
+
+@media (orientation: landscape) and (min-width: 900px) {
+  body.ipad-landscape .app-shell {
+    max-width: 1200px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 250px;
+    grid-template-areas:
+      "hero hero"
+      "stage dock"
+      "stage result";
+    gap: 10px;
+    align-items: start;
+  }
+
+  body.ipad-landscape .hero {
+    grid-area: hero;
+    margin-bottom: 0;
+  }
+
+  body.ipad-landscape .stage-card {
+    grid-area: stage;
+  }
+
+  body.ipad-landscape .auto-dock {
+    grid-area: dock;
+    margin-top: 0;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  body.ipad-landscape .go-btn {
+    grid-column: 1 / -1;
+    min-height: 86px;
+    font-size: 42px;
+  }
+
+  body.ipad-landscape .mini-btn {
+    min-height: 72px;
+    font-size: 30px;
+  }
+
+  body.ipad-landscape .result-card {
+    grid-area: result;
+    margin-top: 0;
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  body.ipad-landscape #resultVideo,
+  body.ipad-landscape #resultImage {
+    min-height: 96px;
+    max-height: 154px;
+  }
+
+  body.ipad-landscape .hint {
+    max-width: 68%;
+  }
+}

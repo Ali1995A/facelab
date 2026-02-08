@@ -58,6 +58,7 @@ const state = {
   supportRecorder: Boolean(window.MediaRecorder),
   supportCaptureStream:
     typeof HTMLCanvasElement !== "undefined" && typeof HTMLCanvasElement.prototype.captureStream === "function",
+  iPadLandscape: false,
 };
 
 state.iPadChrome = state.iPad && state.isChromeIOS;
@@ -89,12 +90,29 @@ function setStatus(text, mode = "ok") {
 }
 
 function fitStage() {
+  updateLayoutMode();
   const parent = els.stage.parentElement;
-  const width = Math.max(320, Math.min(parent.clientWidth - 20, state.iPad ? 620 : 760));
+  const isLandscape = state.iPadLandscape;
+  const maxHeightByViewport = Math.floor(window.innerHeight * (isLandscape ? 0.68 : 0.72));
+  const maxWidthByHeight = Math.floor((maxHeightByViewport * 3) / 4);
+  const width = Math.max(
+    320,
+    Math.min(
+      parent.clientWidth - 20,
+      state.iPad ? (isLandscape ? 760 : 620) : 760,
+      maxWidthByHeight
+    )
+  );
   const evenWidth = width % 2 === 0 ? width : width - 1;
   const height = Math.floor((evenWidth * 4) / 3);
   els.stage.width = evenWidth;
   els.stage.height = height;
+}
+
+function updateLayoutMode() {
+  state.iPadLandscape =
+    state.iPad && window.matchMedia && window.matchMedia("(orientation: landscape)").matches;
+  document.body.classList.toggle("ipad-landscape", state.iPadLandscape);
 }
 
 function refreshHint() {
@@ -768,7 +786,10 @@ function bindEvents() {
   });
 
   window.addEventListener("resize", fitStage, { passive: true });
-  window.addEventListener("orientationchange", fitStage, { passive: true });
+  window.addEventListener("orientationchange", () => {
+    updateLayoutMode();
+    fitStage();
+  });
   window.addEventListener("beforeunload", () => {
     cleanupMediaUrls();
     stopCamera();
@@ -781,6 +802,7 @@ function bindEvents() {
 }
 
 function bootstrap() {
+  updateLayoutMode();
   fitStage();
   refreshHint();
   disableUnsupportedControls();
