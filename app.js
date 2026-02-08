@@ -1,17 +1,10 @@
 const els = {
-  startCameraBtn: document.getElementById("startCameraBtn"),
+  goBtn: document.getElementById("goBtn"),
   switchCameraBtn: document.getElementById("switchCameraBtn"),
-  stickerBtn: document.getElementById("stickerBtn"),
-  effectBtn: document.getElementById("effectBtn"),
-  pixelBtn: document.getElementById("pixelBtn"),
-  speechBtn: document.getElementById("speechBtn"),
-  snapBtn: document.getElementById("snapBtn"),
-  recordBtn: document.getElementById("recordBtn"),
   uploadImageBtn: document.getElementById("uploadImageBtn"),
   uploadVideoBtn: document.getElementById("uploadVideoBtn"),
   uploadImageInput: document.getElementById("uploadImageInput"),
   uploadVideoInput: document.getElementById("uploadVideoInput"),
-  clearBtn: document.getElementById("clearBtn"),
   stage: document.getElementById("stage"),
   camera: document.getElementById("camera"),
   status: document.getElementById("status"),
@@ -30,26 +23,9 @@ const secureLike =
   location.hostname === "localhost" ||
   location.hostname === "127.0.0.1";
 
-const stickerPhrases = [
-  "哇哦",
-  "冲呀",
-  "太可爱啦",
-  "耶",
-  "嘻嘻",
-  "我最棒",
-  "开心到飞起",
-  "biu biu",
-];
-
-const effects = [
-  { id: "none", icon: "✨" },
-  { id: "spark", icon: "🌟" },
-  { id: "heart", icon: "💖" },
-  { id: "glitch", icon: "⚡" },
-];
-
+const stickerPhrases = ["哇哦", "冲呀", "太可爱啦", "耶", "嘻嘻", "我最棒", "开心到飞起", "biu biu"];
+const effects = ["none", "spark", "heart", "glitch"];
 const pixelLevels = [6, 8, 10, 12];
-const pixelIcons = ["🧊", "🟦", "🟪", "🟫"];
 
 const state = {
   facingMode: "user",
@@ -58,7 +34,6 @@ const state = {
   sourceImage: null,
   sourceVideo: null,
   sourceVideoUrl: null,
-  recorder: null,
   audioStream: null,
   chunks: [],
   overlays: [],
@@ -67,13 +42,14 @@ const state = {
   speechWanted: false,
   recognition: null,
   recording: false,
+  busyAction: false,
   recordSeconds: 4,
   recordDeadline: 0,
   renderId: 0,
+  effectIndex: 1,
+  pixelIndex: 1,
   mediaUrl: null,
   imageUrl: null,
-  effectIndex: 0,
-  pixelIndex: 1,
   iPad: /iPad/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1),
   isWeChat: /micromessenger/.test(lowUA),
   isChromeIOS: /crios/.test(lowUA),
@@ -126,16 +102,17 @@ function refreshHint() {
   if (state.isWeChat) tags.push("微信");
   if (state.iPadChrome) tags.push("iPad Chrome");
   if (!secureLike) tags.push("非HTTPS");
-  if (!state.supportSpeech) tags.push("无语音");
+  if (!state.supportRecorder || !state.supportCaptureStream) tags.push("无视频录制");
+
   els.envHint.textContent = tags.length
-    ? `家长提示: ${tags.join(" · ")}，可用拍照/录像导入模式`
-    : "家长提示: 点击🚀开拍，📸拍图，🎬录4秒";
+    ? `家长提示: ${tags.join(" · ")}，会自动切换最稳妥模式`
+    : "家长提示: 点击🪄一次就完成";
 }
 
-function updateToolIcons() {
-  els.effectBtn.textContent = effects[state.effectIndex].icon;
-  els.pixelBtn.textContent = pixelIcons[state.pixelIndex];
-  els.speechBtn.textContent = state.speechWanted ? "🛑" : "🎤";
+function rotateStyle() {
+  state.effectIndex = (state.effectIndex + 1) % effects.length;
+  state.pixelIndex = (state.pixelIndex + 1) % pixelLevels.length;
+  addFloatingText(pick(stickerPhrases), "manual");
 }
 
 function stopSourceVideo() {
@@ -169,7 +146,7 @@ function activateImageSource(image) {
   stopSourceVideo();
   state.sourceMode = "image";
   state.sourceImage = image;
-  setStatus("🖼️ 已装进相机");
+  setStatus("🖼️ 已导入");
 }
 
 function activateVideoSource(video, objectUrl) {
@@ -178,7 +155,7 @@ function activateVideoSource(video, objectUrl) {
   state.sourceMode = "video";
   state.sourceVideo = video;
   state.sourceVideoUrl = objectUrl;
-  setStatus("🎞️ 已装进相机");
+  setStatus("🎞️ 已导入");
 }
 
 async function getCameraStreamWithFallback() {
@@ -194,6 +171,7 @@ async function getCameraStreamWithFallback() {
     { video: { facingMode: state.facingMode }, audio: false },
     { video: true, audio: false },
   ];
+
   for (const req of tries) {
     try {
       return await navigator.mediaDevices.getUserMedia(req);
@@ -205,21 +183,21 @@ async function getCameraStreamWithFallback() {
 }
 
 async function startCamera() {
-  vibrateTap();
   if (!state.supportLiveCamera) {
-    setStatus("⚠️ 不支持实时相机", "error");
-    return;
+    setStatus("⚠️ 实时相机不可用", "error");
+    return false;
   }
   if (!secureLike) {
     setStatus("⚠️ 需HTTPS才能开相机", "error");
-    return;
+    return false;
   }
   await stopCamera();
   clearSourcesToLive();
+
   const stream = await getCameraStreamWithFallback();
   if (!stream) {
-    setStatus("⚠️ 开相机失败，可用🖼️/🎞️", "error");
-    return;
+    setStatus("⚠️ 相机失败，可用🖼️/🎞️", "error");
+    return false;
   }
   state.stream = stream;
   els.camera.srcObject = stream;
@@ -229,6 +207,7 @@ async function startCamera() {
     console.warn(error);
   }
   setStatus(state.facingMode === "user" ? "🤳 前置镜头开启" : "📷 后置镜头开启");
+  return true;
 }
 
 function addFloatingText(text, source = "manual") {
@@ -254,27 +233,6 @@ function addFloatingText(text, source = "manual") {
   emitBurst(x, y, pick(["#76dbff", "#ffc0df", "#ffd77f"]));
 }
 
-function addSticker() {
-  vibrateTap();
-  addFloatingText(pick(stickerPhrases), "manual");
-  setStatus("😆 贴纸+1");
-}
-
-function cycleEffect() {
-  vibrateTap();
-  state.effectIndex = (state.effectIndex + 1) % effects.length;
-  updateToolIcons();
-  emitBurst(els.stage.width * 0.5, els.stage.height * 0.45, "#ffd77f");
-  setStatus(`✨ 特效切换 ${effects[state.effectIndex].icon}`);
-}
-
-function cyclePixel() {
-  vibrateTap();
-  state.pixelIndex = (state.pixelIndex + 1) % pixelLevels.length;
-  updateToolIcons();
-  setStatus("🧊 像素风切换");
-}
-
 function emitBurst(x, y, color) {
   for (let i = 0; i < 14; i += 1) {
     state.particles.push({
@@ -292,7 +250,7 @@ function emitBurst(x, y, color) {
 }
 
 function emitEffect() {
-  const effect = effects[state.effectIndex].id;
+  const effect = effects[state.effectIndex];
   if (effect === "none") return;
 
   if (effect === "spark" && Math.random() < 0.65) {
@@ -390,9 +348,7 @@ function drawOverlays() {
 }
 
 function drawGlitchLines() {
-  if (effects[state.effectIndex].id !== "glitch") {
-    return;
-  }
+  if (effects[state.effectIndex] !== "glitch") return;
   for (let i = 0; i < 4; i += 1) {
     if (Math.random() < 0.45) {
       const y = rand(0, els.stage.height);
@@ -439,6 +395,7 @@ function drawSourcePixelated(source, targetWidth, targetHeight) {
     tinyCanvas.width = tinyW;
     tinyCanvas.height = tinyH;
   }
+
   const srcRatio = dims.width / dims.height;
   const dstRatio = targetWidth / targetHeight;
   let sx = 0;
@@ -452,6 +409,7 @@ function drawSourcePixelated(source, targetWidth, targetHeight) {
     sh = Math.floor(dims.width / dstRatio);
     sy = Math.floor((dims.height - sh) / 2);
   }
+
   tinyCtx.drawImage(source, sx, sy, sw, sh, 0, 0, tinyW, tinyH);
   ctx.imageSmoothingEnabled = false;
   ctx.drawImage(tinyCanvas, 0, 0, targetWidth, targetHeight);
@@ -528,8 +486,56 @@ function cleanupMediaUrls() {
   stopSourceVideo();
 }
 
-async function snapPhoto() {
-  vibrateTap();
+async function autoSaveBlob(blob, type) {
+  const isVideo = type === "video";
+  const ts = Date.now();
+  const ext = isVideo ? (blob.type.includes("mp4") ? "mp4" : "webm") : "png";
+  const fileName = `facelab-kids-${ts}.${ext}`;
+  const mime = blob.type || (isVideo ? "video/webm" : "image/png");
+
+  if (isVideo) {
+    if (state.mediaUrl) URL.revokeObjectURL(state.mediaUrl);
+    state.mediaUrl = URL.createObjectURL(blob);
+    els.resultVideo.src = state.mediaUrl;
+    els.resultVideo.load();
+    els.downloadVideo.href = state.mediaUrl;
+    els.downloadVideo.download = fileName;
+  } else {
+    if (state.imageUrl) URL.revokeObjectURL(state.imageUrl);
+    state.imageUrl = URL.createObjectURL(blob);
+    els.resultImage.src = state.imageUrl;
+    els.downloadImage.href = state.imageUrl;
+    els.downloadImage.download = fileName;
+  }
+
+  const file = new File([blob], fileName, { type: mime });
+  if (navigator.share) {
+    try {
+      if (!navigator.canShare || navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title: "FaceLab",
+          text: "保存到相册",
+        });
+        setStatus("✅ 已弹出保存面板");
+        return;
+      }
+    } catch (error) {
+      console.warn("share failed", error);
+    }
+  }
+
+  try {
+    const link = isVideo ? els.downloadVideo : els.downloadImage;
+    link.click();
+    setStatus("✅ 已自动下载");
+  } catch (error) {
+    console.warn("download click failed", error);
+    setStatus("✅ 已完成，请长按预览存相册");
+  }
+}
+
+async function snapPhoto(autoSave = false) {
   const blob = await new Promise((resolve) => {
     els.stage.toBlob(resolve, "image/png", 0.95);
   });
@@ -537,18 +543,65 @@ async function snapPhoto() {
     setStatus("❌ 拍照失败", "error");
     return;
   }
+  if (autoSave) {
+    await autoSaveBlob(blob, "image");
+    return;
+  }
   if (state.imageUrl) URL.revokeObjectURL(state.imageUrl);
   state.imageUrl = URL.createObjectURL(blob);
   els.resultImage.src = state.imageUrl;
   els.downloadImage.href = state.imageUrl;
   els.downloadImage.download = `facelab-kids-${Date.now()}.png`;
-  setStatus("📸 完成，可点⬇️🖼️");
+  setStatus("📸 已完成");
 }
 
-async function recordClip() {
-  vibrateTap();
+function ensureSpeechPassive() {
+  if (!state.supportSpeech) return;
+  if (!state.recognition) {
+    const recognition = new speechClass();
+    recognition.lang = "zh-CN";
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.onresult = (event) => {
+      let interim = "";
+      for (let i = event.resultIndex; i < event.results.length; i += 1) {
+        const text = event.results[i][0].transcript.trim();
+        if (!text) continue;
+        if (event.results[i].isFinal) {
+          addFloatingText(text, "speech");
+        } else {
+          interim += text;
+        }
+      }
+      state.interimText = interim;
+    };
+    recognition.onend = () => {
+      state.interimText = "";
+      if (state.speechWanted) {
+        window.setTimeout(() => {
+          try {
+            recognition.start();
+          } catch (error) {
+            console.warn(error);
+          }
+        }, 260);
+      }
+    };
+    state.recognition = recognition;
+  }
+  if (!state.speechWanted) {
+    try {
+      state.recognition.start();
+      state.speechWanted = true;
+    } catch (error) {
+      console.warn("speech passive start failed", error);
+    }
+  }
+}
+
+async function recordClipAndSave() {
   if (!state.supportRecorder || !state.supportCaptureStream) {
-    setStatus("⚠️ 录制不可用", "error");
+    await snapPhoto(true);
     return;
   }
   if (state.recording) return;
@@ -579,8 +632,9 @@ async function recordClip() {
         })
       : new MediaRecorder(stream);
   } catch (error) {
-    setStatus("❌ 无法录制", "error");
+    setStatus("⚠️ 视频录制失败，改为拍照", "error");
     stream.getTracks().forEach((track) => track.stop());
+    await snapPhoto(true);
     return;
   }
 
@@ -588,116 +642,60 @@ async function recordClip() {
   state.recording = true;
   state.recordDeadline = Date.now() + seconds * 1000;
 
-  recorder.ondataavailable = (event) => {
-    if (event.data && event.data.size > 0) {
-      state.chunks.push(event.data);
-    }
-  };
+  const done = new Promise((resolve) => {
+    recorder.ondataavailable = (event) => {
+      if (event.data && event.data.size > 0) {
+        state.chunks.push(event.data);
+      }
+    };
+    recorder.onstop = async () => {
+      state.recording = false;
+      const blob = new Blob(state.chunks, { type: mimeType || "video/webm" });
+      await autoSaveBlob(blob, "video");
 
-  recorder.onstop = () => {
-    state.recording = false;
-    const blob = new Blob(state.chunks, { type: mimeType || "video/webm" });
-    if (state.mediaUrl) URL.revokeObjectURL(state.mediaUrl);
-    state.mediaUrl = URL.createObjectURL(blob);
-    const ext = blob.type.includes("mp4") ? "mp4" : "webm";
-    els.resultVideo.src = state.mediaUrl;
-    els.resultVideo.load();
-    els.downloadVideo.href = state.mediaUrl;
-    els.downloadVideo.download = `facelab-kids-${Date.now()}.${ext}`;
-    setStatus("🎬 完成，可点⬇️🎬");
-
-    stream.getTracks().forEach((track) => track.stop());
-    if (state.audioStream) {
-      state.audioStream.getTracks().forEach((track) => track.stop());
-      state.audioStream = null;
-    }
-  };
+      stream.getTracks().forEach((track) => track.stop());
+      if (state.audioStream) {
+        state.audioStream.getTracks().forEach((track) => track.stop());
+        state.audioStream = null;
+      }
+      resolve();
+    };
+  });
 
   recorder.start(220);
-  setStatus(`🔴 录制 ${seconds}s`);
+  setStatus(`🔴 自动录制 ${seconds}s`);
   window.setTimeout(() => {
-    if (recorder.state !== "inactive") recorder.stop();
+    if (recorder.state !== "inactive") {
+      recorder.stop();
+    }
   }, seconds * 1000);
+  await done;
 }
 
-function ensureSpeechRecognition() {
-  if (!speechClass) {
-    setStatus("⚠️ 没有语音功能", "error");
-    return null;
-  }
-  const recognition = new speechClass();
-  recognition.lang = "zh-CN";
-  recognition.continuous = true;
-  recognition.interimResults = true;
-
-  recognition.onresult = (event) => {
-    let interim = "";
-    for (let i = event.resultIndex; i < event.results.length; i += 1) {
-      const text = event.results[i][0].transcript.trim();
-      if (!text) continue;
-      if (event.results[i].isFinal) {
-        addFloatingText(text, "speech");
-      } else {
-        interim += text;
-      }
-    }
-    state.interimText = interim;
-  };
-
-  recognition.onerror = () => {
-    setStatus("⚠️ 语音识别异常", "error");
-  };
-
-  recognition.onend = () => {
-    state.interimText = "";
-    if (state.speechWanted) {
-      window.setTimeout(() => {
-        try {
-          recognition.start();
-        } catch (error) {
-          console.warn(error);
-        }
-      }, 250);
-    }
-  };
-  return recognition;
-}
-
-function toggleSpeech() {
+async function oneTapCreate() {
+  if (state.busyAction || state.recording) return;
+  state.busyAction = true;
   vibrateTap();
-  if (!state.recognition) {
-    state.recognition = ensureSpeechRecognition();
-    if (!state.recognition) return;
+  setStatus("✨ 准备中");
+
+  let source = resolveRenderSource();
+  if (!source) {
+    await startCamera();
+    source = resolveRenderSource();
   }
 
-  if (!state.speechWanted) {
-    state.speechWanted = true;
-    try {
-      state.recognition.start();
-      setStatus("🎤 说话会变成漂浮字");
-    } catch (error) {
-      state.speechWanted = false;
-      setStatus("⚠️ 语音暂时不可用", "error");
+  if (!source) {
+    state.busyAction = false;
+    if (state.isWeChat) {
+      setStatus("⚠️ 点🖼️或🎞️导入后再点🪄", "error");
     }
-  } else {
-    state.speechWanted = false;
-    try {
-      state.recognition.stop();
-    } catch (error) {
-      console.warn(error);
-    }
-    state.interimText = "";
-    setStatus("🎤 已关闭");
+    return;
   }
-  updateToolIcons();
-}
 
-function clearOverlays() {
-  vibrateTap();
-  state.overlays = [];
-  state.particles = [];
-  state.interimText = "";
-  setStatus("🧹 清空啦");
+  rotateStyle();
+  ensureSpeechPassive();
+  await recordClipAndSave();
+  state.busyAction = false;
 }
 
 function loadImageFile(file) {
@@ -739,30 +737,17 @@ function loadVideoFile(file) {
 
 function disableUnsupportedControls() {
   if (!state.supportLiveCamera || !secureLike) {
-    els.startCameraBtn.disabled = true;
     els.switchCameraBtn.disabled = true;
-  }
-  if (!state.supportSpeech) {
-    els.speechBtn.disabled = true;
-  }
-  if (!state.supportRecorder || !state.supportCaptureStream) {
-    els.recordBtn.disabled = true;
   }
 }
 
 function bindEvents() {
-  els.startCameraBtn.addEventListener("click", startCamera);
+  els.goBtn.addEventListener("click", oneTapCreate);
   els.switchCameraBtn.addEventListener("click", async () => {
     vibrateTap();
     state.facingMode = state.facingMode === "user" ? "environment" : "user";
     await startCamera();
   });
-  els.stickerBtn.addEventListener("click", addSticker);
-  els.effectBtn.addEventListener("click", cycleEffect);
-  els.pixelBtn.addEventListener("click", cyclePixel);
-  els.speechBtn.addEventListener("click", toggleSpeech);
-  els.snapBtn.addEventListener("click", snapPhoto);
-  els.recordBtn.addEventListener("click", recordClip);
   els.uploadImageBtn.addEventListener("click", () => {
     vibrateTap();
     els.uploadImageInput.click();
@@ -781,7 +766,6 @@ function bindEvents() {
     loadVideoFile(file);
     event.target.value = "";
   });
-  els.clearBtn.addEventListener("click", clearOverlays);
 
   window.addEventListener("resize", fitStage, { passive: true });
   window.addEventListener("orientationchange", fitStage, { passive: true });
@@ -799,20 +783,19 @@ function bindEvents() {
 function bootstrap() {
   fitStage();
   refreshHint();
-  updateToolIcons();
   disableUnsupportedControls();
   bindEvents();
   render();
 
   if (state.isWeChat) {
-    setStatus("👋 微信里可直接点🖼️或🎞️");
+    setStatus("👋 微信里点🪄或先导入素材");
     return;
   }
   if (state.iPadChrome) {
-    setStatus("👋 iPad Chrome 已优化");
+    setStatus("👋 iPad Chrome 已优化，点🪄");
     return;
   }
-  setStatus("👋 点🚀开始");
+  setStatus("👋 点🪄自动完成");
 }
 
 bootstrap();
