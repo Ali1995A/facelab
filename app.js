@@ -47,7 +47,8 @@ const state = {
   mediaUrl: null,
   imageUrl: null,
   pending: null,
-  audioStream: null,
+  micStream: null,
+  micRequested: false,
   iPad: /iPad/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1),
   isWeChat: /micromessenger/.test(lowUA),
   isChromeIOS: /crios/.test(lowUA),
@@ -167,6 +168,37 @@ function bindOptionSelections() {
 
   setActiveOption(els.effectOptions, state.effectId, "data-fx");
   setActiveOption(els.textStyleOptions, state.textStyleId, "data-text-style");
+}
+
+async function prepareMicrophone({ silent = false } = {}) {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    if (!silent) {
+      setStatus("⚠️ 浏览器不支持麦克风", "error");
+    }
+    return false;
+  }
+
+  if (state.micStream && state.micStream.active && state.micStream.getAudioTracks().length > 0) {
+    return true;
+  }
+
+  state.micRequested = true;
+  try {
+    state.micStream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+      },
+      video: false,
+    });
+    return true;
+  } catch (error) {
+    console.warn("microphone request failed", error);
+    if (!silent) {
+      setStatus("⚠️ 麦克风未授权，录像可能无声", "error");
+    }
+    return false;
+  }
 }
 
 async function stopCamera() {
@@ -697,14 +729,11 @@ async function startRecording() {
   }
 
   const canvasStream = els.stage.captureStream(state.iPad ? 22 : 30);
-  try {
-    state.audioStream = await navigator.mediaDevices.getUserMedia({
-      audio: { echoCancellation: true, noiseSuppression: true },
-      video: false,
-    });
-    state.audioStream.getAudioTracks().forEach((track) => canvasStream.addTrack(track));
-  } catch (error) {
-    console.warn("no mic track", error);
+  const micReady = await prepareMicrophone({ silent: true });
+  if (micReady && state.micStream) {
+    state.micStream.getAudioTracks().forEach((track) => canvasStream.addTrack(track));
+  } else {
+    setStatus("⚠️ 麦克风未就绪，本次录像可能无声", "error");
   }
 
   const mimeType = pickRecorderMime();
@@ -748,10 +777,6 @@ async function startRecording() {
     }
 
     canvasStream.getTracks().forEach((track) => track.stop());
-    if (state.audioStream) {
-      state.audioStream.getTracks().forEach((track) => track.stop());
-      state.audioStream = null;
-    }
   };
 
   recorder.start(220);
@@ -912,6 +937,10 @@ function bindEvents() {
     stopRecordProgressLoop();
     stopRecording(false);
     cleanupMediaUrls();
+    if (state.micStream) {
+      state.micStream.getTracks().forEach((track) => track.stop());
+      state.micStream = null;
+    }
     stopCamera();
     window.cancelAnimationFrame(state.renderId);
   });
@@ -925,6 +954,12 @@ async function bootstrap() {
   render();
   setStatus("👋 短按拍照，长按录像");
   await startCamera();
+  const micReady = await prepareMicrophone({ silent: true });
+  if (micReady) {
+    setStatus("📷🎙️ 摄像头和麦克风已就绪");
+  } else if (state.micRequested) {
+    setStatus("📷 已就绪，麦克风待授权", "error");
+  }
 }
 
 bootstrap();
