@@ -83,6 +83,7 @@ body {
   max-height: 67vh;
   border-radius: 18px;
   background: #9cb8d4;
+  touch-action: none;
 }
 
 #camera {
@@ -110,7 +111,7 @@ body {
 .auto-dock {
   margin-top: 12px;
   display: grid;
-  grid-template-columns: 1fr repeat(3, minmax(56px, 82px));
+  grid-template-columns: 1fr repeat(4, minmax(56px, 82px));
   gap: 10px;
 }
 
@@ -160,6 +161,43 @@ body {
   gap: 10px;
 }
 
+.option-card {
+  margin-top: 10px;
+  padding: 10px;
+  border-radius: var(--radius);
+  border: 1px solid var(--glass-border);
+  background: var(--glass);
+  box-shadow: var(--shadow);
+}
+
+.option-row {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.option-row + .option-row {
+  margin-top: 8px;
+}
+
+.opt-btn {
+  border: 1px solid rgba(255, 255, 255, 0.95);
+  background: rgba(255, 255, 255, 0.82);
+  color: var(--ink);
+  border-radius: 999px;
+  min-height: 38px;
+  padding: 0 14px;
+  font-size: 14px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.opt-btn.active {
+  background: linear-gradient(150deg, #fff5a9, #ffc882);
+}
+
 #resultVideo,
 #resultImage {
   width: 100%;
@@ -183,7 +221,7 @@ body {
     display: none;
   }
   .auto-dock {
-    grid-template-columns: 1fr repeat(3, minmax(54px, 68px));
+    grid-template-columns: 1fr repeat(4, minmax(54px, 68px));
     gap: 8px;
   }
   .go-btn,
@@ -200,6 +238,11 @@ body {
   .result-card {
     grid-template-columns: 1fr;
   }
+  .opt-btn {
+    min-height: 34px;
+    font-size: 13px;
+    padding: 0 12px;
+  }
 }
 
 @media (orientation: landscape) and (min-width: 900px) {
@@ -210,6 +253,7 @@ body {
     grid-template-areas:
       "hero hero"
       "stage dock"
+      "stage options"
       "stage result";
     gap: 10px;
     align-items: start;
@@ -247,6 +291,22 @@ body {
     margin-top: 0;
     grid-template-columns: 1fr;
     gap: 8px;
+  }
+
+  body.ipad-landscape .option-card {
+    grid-area: options;
+    margin-top: 0;
+    padding: 8px;
+  }
+
+  body.ipad-landscape .option-row {
+    gap: 6px;
+  }
+
+  body.ipad-landscape .opt-btn {
+    min-height: 34px;
+    padding: 0 10px;
+    font-size: 12px;
   }
 
   body.ipad-landscape #resultVideo,

@@ -22,9 +22,28 @@
 
       <section class="auto-dock" aria-label="one-tap-controls">
         <button id="goBtn" class="go-btn" aria-label="one-tap-shoot">🪄</button>
+        <button id="addTextBtn" class="mini-btn" aria-label="add-text">➕字</button>
         <button id="switchCameraBtn" class="mini-btn" aria-label="switch-camera">🔄</button>
         <button id="uploadImageBtn" class="mini-btn" aria-label="import-photo">🖼️</button>
         <button id="uploadVideoBtn" class="mini-btn" aria-label="import-video">🎞️</button>
+      </section>
+
+      <section class="option-card">
+        <div class="option-row" id="effectOptions">
+          <button class="opt-btn active" data-fx="none">无</button>
+          <button class="opt-btn" data-fx="spark">火花</button>
+          <button class="opt-btn" data-fx="heart">爱心</button>
+          <button class="opt-btn" data-fx="glitch">故障</button>
+          <button class="opt-btn" data-fx="confetti">彩纸</button>
+          <button class="opt-btn" data-fx="speed">速度线</button>
+        </div>
+        <div class="option-row" id="textStyleOptions">
+          <button class="opt-btn active" data-text-style="classic">经典</button>
+          <button class="opt-btn" data-text-style="neon">霓虹</button>
+          <button class="opt-btn" data-text-style="fire">火焰</button>
+          <button class="opt-btn" data-text-style="candy">糖果</button>
+          <button class="opt-btn" data-text-style="shake">抖动</button>
+        </div>
       </section>
 
       <section class="result-card">

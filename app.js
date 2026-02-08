@@ -1,5 +1,6 @@
 const els = {
   goBtn: document.getElementById("goBtn"),
+  addTextBtn: document.getElementById("addTextBtn"),
   switchCameraBtn: document.getElementById("switchCameraBtn"),
   uploadImageBtn: document.getElementById("uploadImageBtn"),
   uploadVideoBtn: document.getElementById("uploadVideoBtn"),
@@ -9,6 +10,8 @@ const els = {
   camera: document.getElementById("camera"),
   status: document.getElementById("status"),
   envHint: document.getElementById("envHint"),
+  effectOptions: document.getElementById("effectOptions"),
+  textStyleOptions: document.getElementById("textStyleOptions"),
   resultVideo: document.getElementById("resultVideo"),
   resultImage: document.getElementById("resultImage"),
   downloadImage: document.getElementById("downloadImage"),
@@ -24,8 +27,9 @@ const secureLike =
   location.hostname === "127.0.0.1";
 
 const stickerPhrases = ["哇哦", "冲呀", "太可爱啦", "耶", "嘻嘻", "我最棒", "开心到飞起", "biu biu"];
-const effects = ["none", "spark", "heart", "glitch"];
 const pixelLevels = [6, 8, 10, 12];
+const textStyles = ["classic", "neon", "fire", "candy", "shake"];
+const fxStyles = ["none", "spark", "heart", "glitch", "confetti", "speed"];
 
 const state = {
   facingMode: "user",
@@ -46,7 +50,9 @@ const state = {
   recordSeconds: 4,
   recordDeadline: 0,
   renderId: 0,
-  effectIndex: 1,
+  overlaySeq: 1,
+  effectId: "none",
+  textStyleId: "classic",
   pixelIndex: 1,
   mediaUrl: null,
   imageUrl: null,
@@ -59,6 +65,13 @@ const state = {
   supportCaptureStream:
     typeof HTMLCanvasElement !== "undefined" && typeof HTMLCanvasElement.prototype.captureStream === "function",
   iPadLandscape: false,
+  drag: {
+    active: false,
+    overlayId: null,
+    pointerId: null,
+    offsetX: 0,
+    offsetY: 0,
+  },
 };
 
 state.iPadChrome = state.iPad && state.isChromeIOS;
@@ -124,13 +137,39 @@ function refreshHint() {
 
   els.envHint.textContent = tags.length
     ? `家长提示: ${tags.join(" · ")}，会自动切换最稳妥模式`
-    : "家长提示: 点击🪄一次就完成";
+    : "家长提示: 文字可直接拖动摆放";
 }
 
-function rotateStyle() {
-  state.effectIndex = (state.effectIndex + 1) % effects.length;
-  state.pixelIndex = (state.pixelIndex + 1) % pixelLevels.length;
-  addFloatingText(pick(stickerPhrases), "manual");
+function setActiveOption(container, value, attrName) {
+  if (!container) return;
+  container.querySelectorAll(".opt-btn").forEach((button) => {
+    button.classList.toggle("active", button.getAttribute(attrName) === value);
+  });
+}
+
+function bindOptionSelections() {
+  els.effectOptions?.addEventListener("click", (event) => {
+    const button = event.target.closest(".opt-btn[data-fx]");
+    if (!button) return;
+    const fx = button.getAttribute("data-fx");
+    if (!fxStyles.includes(fx)) return;
+    state.effectId = fx;
+    setActiveOption(els.effectOptions, fx, "data-fx");
+    setStatus(`✨ 特效: ${button.textContent}`);
+  });
+
+  els.textStyleOptions?.addEventListener("click", (event) => {
+    const button = event.target.closest(".opt-btn[data-text-style]");
+    if (!button) return;
+    const styleId = button.getAttribute("data-text-style");
+    if (!textStyles.includes(styleId)) return;
+    state.textStyleId = styleId;
+    setActiveOption(els.textStyleOptions, styleId, "data-text-style");
+    setStatus(`🔤 文字: ${button.textContent}`);
+  });
+
+  setActiveOption(els.effectOptions, state.effectId, "data-fx");
+  setActiveOption(els.textStyleOptions, state.textStyleId, "data-text-style");
 }
 
 function stopSourceVideo() {
@@ -189,7 +228,6 @@ async function getCameraStreamWithFallback() {
     { video: { facingMode: state.facingMode }, audio: false },
     { video: true, audio: false },
   ];
-
   for (const req of tries) {
     try {
       return await navigator.mediaDevices.getUserMedia(req);
@@ -228,27 +266,40 @@ async function startCamera() {
   return true;
 }
 
-function addFloatingText(text, source = "manual") {
+function addFloatingText(text, options = {}) {
   if (!text) return;
-  const x = rand(80, els.stage.width - 80);
-  const y = rand(els.stage.height * 0.55, els.stage.height * 0.9);
-  const fontSize = source === "speech" ? rand(24, 34) : rand(28, 44);
+  const source = options.source || "manual";
+  const sticky = options.sticky ?? source !== "speech";
+  const styleId = options.styleId || state.textStyleId;
+  const x = options.x ?? rand(80, els.stage.width - 80);
+  const y = options.y ?? rand(els.stage.height * 0.55, els.stage.height * 0.9);
+  const fontSize = options.fontSize ?? (source === "speech" ? rand(24, 34) : rand(28, 44));
   const colors = ["#ffffff", "#ffe082", "#ffd8f0", "#baf4ff", "#bde7bd"];
   state.overlays.push({
+    id: state.overlaySeq++,
     text,
     x,
     y,
-    vx: rand(-0.35, 0.35),
-    vy: rand(-1.45, -0.55),
+    vx: sticky ? 0 : rand(-0.35, 0.35),
+    vy: sticky ? 0 : rand(-1.45, -0.55),
     life: 0,
-    maxLife: rand(130, 220),
+    maxLife: sticky ? 999999 : rand(130, 220),
     fontSize,
     color: pick(colors),
+    styleId,
+    sticky,
+    hit: null,
   });
-  if (state.overlays.length > 44) {
+  if (state.overlays.length > 60) {
     state.overlays.shift();
   }
   emitBurst(x, y, pick(["#76dbff", "#ffc0df", "#ffd77f"]));
+}
+
+function addPresetText() {
+  vibrateTap();
+  addFloatingText(pick(stickerPhrases), { source: "manual", sticky: true, styleId: state.textStyleId });
+  setStatus("➕ 已添加文字，可拖动");
 }
 
 function emitBurst(x, y, color) {
@@ -263,15 +314,16 @@ function emitBurst(x, y, color) {
       life: 0,
       maxLife: rand(20, 50),
       color,
+      rotation: 0,
+      vr: 0,
     });
   }
 }
 
 function emitEffect() {
-  const effect = effects[state.effectIndex];
-  if (effect === "none") return;
+  if (state.effectId === "none") return;
 
-  if (effect === "spark" && Math.random() < 0.65) {
+  if (state.effectId === "spark" && Math.random() < 0.65) {
     state.particles.push({
       shape: "spark",
       x: rand(0, els.stage.width),
@@ -282,10 +334,12 @@ function emitEffect() {
       life: 0,
       maxLife: rand(25, 80),
       color: pick(["#7dd3ff", "#ffffff", "#9de3d5"]),
+      rotation: 0,
+      vr: 0,
     });
   }
 
-  if (effect === "heart" && Math.random() < 0.35) {
+  if (state.effectId === "heart" && Math.random() < 0.35) {
     state.particles.push({
       shape: "heart",
       x: rand(30, els.stage.width - 30),
@@ -296,11 +350,29 @@ function emitEffect() {
       life: 0,
       maxLife: rand(70, 130),
       color: pick(["#ff8ba7", "#fda4af", "#fecdd3"]),
+      rotation: 0,
+      vr: 0,
     });
   }
 
-  if (state.particles.length > 280) {
-    state.particles.splice(0, state.particles.length - 280);
+  if (state.effectId === "confetti" && Math.random() < 0.55) {
+    state.particles.push({
+      shape: "confetti",
+      x: rand(0, els.stage.width),
+      y: -10,
+      vx: rand(-0.9, 0.9),
+      vy: rand(1.4, 2.8),
+      size: rand(4, 8),
+      life: 0,
+      maxLife: rand(60, 130),
+      color: pick(["#ffd166", "#06d6a0", "#118ab2", "#ef476f", "#8ecae6"]),
+      rotation: rand(0, Math.PI * 2),
+      vr: rand(-0.16, 0.16),
+    });
+  }
+
+  if (state.particles.length > 320) {
+    state.particles.splice(0, state.particles.length - 320);
   }
 }
 
@@ -311,12 +383,20 @@ function drawParticles() {
     if (p.life > p.maxLife) continue;
     p.x += p.vx;
     p.y += p.vy;
+    p.rotation += p.vr || 0;
     const alpha = 1 - p.life / p.maxLife;
     ctx.globalAlpha = Math.max(0, alpha);
     if (p.shape === "heart") {
       ctx.fillStyle = p.color;
       ctx.font = `${p.size}px sans-serif`;
       ctx.fillText("❤", p.x, p.y);
+    } else if (p.shape === "confetti") {
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate(p.rotation);
+      ctx.fillStyle = p.color;
+      ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 0.6);
+      ctx.restore();
     } else {
       ctx.fillStyle = p.color;
       ctx.beginPath();
@@ -329,23 +409,77 @@ function drawParticles() {
   state.particles = next;
 }
 
+function applyTextStyle(t, drawX, drawY) {
+  const jitterX = t.styleId === "shake" ? rand(-1.8, 1.8) : 0;
+  const jitterY = t.styleId === "shake" ? rand(-1.2, 1.2) : 0;
+  const x = drawX + jitterX;
+  const y = drawY + jitterY;
+
+  ctx.shadowColor = "transparent";
+  ctx.shadowBlur = 0;
+  ctx.shadowOffsetX = 0;
+  ctx.shadowOffsetY = 0;
+
+  if (t.styleId === "neon") {
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = "rgba(11, 36, 61, 0.68)";
+    ctx.fillStyle = "#8df5ff";
+    ctx.shadowColor = "#4dd8ff";
+    ctx.shadowBlur = 12;
+  } else if (t.styleId === "fire") {
+    ctx.lineWidth = 5;
+    ctx.strokeStyle = "rgba(80, 20, 0, 0.7)";
+    ctx.fillStyle = "#ffe08a";
+    ctx.shadowColor = "#ff5b2e";
+    ctx.shadowBlur = 12;
+  } else if (t.styleId === "candy") {
+    ctx.lineWidth = 6;
+    ctx.strokeStyle = "rgba(255,255,255,0.9)";
+    ctx.fillStyle = "#ff7ab8";
+    ctx.shadowColor = "#ffc0df";
+    ctx.shadowBlur = 8;
+  } else if (t.styleId === "shake") {
+    ctx.lineWidth = 6;
+    ctx.strokeStyle = "rgba(0,0,0,0.42)";
+    ctx.fillStyle = "#fff3b0";
+  } else {
+    ctx.lineWidth = 6;
+    ctx.strokeStyle = "rgba(0,0,0,0.35)";
+    ctx.fillStyle = t.color;
+  }
+
+  ctx.strokeText(t.text, x, y);
+  ctx.fillText(t.text, x, y);
+  ctx.shadowColor = "transparent";
+  ctx.shadowBlur = 0;
+}
+
 function drawOverlays() {
   const next = [];
   for (const t of state.overlays) {
     t.life += 1;
     if (t.life > t.maxLife) continue;
-    t.x += t.vx;
-    t.y += t.vy;
-    t.vx *= 0.997;
-    const alpha = 1 - t.life / t.maxLife;
+
+    if (!t.sticky && state.drag.overlayId !== t.id) {
+      t.x += t.vx;
+      t.y += t.vy;
+      t.vx *= 0.997;
+    }
+
+    const alpha = t.sticky ? 1 : 1 - t.life / t.maxLife;
     ctx.globalAlpha = Math.max(0, alpha);
     ctx.font = `${Math.floor(t.fontSize)}px "SF Pro Rounded","PingFang SC",sans-serif`;
     ctx.textAlign = "center";
-    ctx.lineWidth = 6;
-    ctx.strokeStyle = "rgba(0,0,0,0.35)";
-    ctx.fillStyle = t.color;
-    ctx.strokeText(t.text, t.x, t.y);
-    ctx.fillText(t.text, t.x, t.y);
+    applyTextStyle(t, t.x, t.y);
+
+    const w = ctx.measureText(t.text).width;
+    const h = t.fontSize;
+    t.hit = {
+      left: t.x - w / 2 - 10,
+      right: t.x + w / 2 + 10,
+      top: t.y - h - 10,
+      bottom: t.y + 10,
+    };
     next.push(t);
   }
   ctx.globalAlpha = 1;
@@ -366,7 +500,7 @@ function drawOverlays() {
 }
 
 function drawGlitchLines() {
-  if (effects[state.effectIndex] !== "glitch") return;
+  if (state.effectId !== "glitch") return;
   for (let i = 0; i < 4; i += 1) {
     if (Math.random() < 0.45) {
       const y = rand(0, els.stage.height);
@@ -375,6 +509,23 @@ function drawGlitchLines() {
       ctx.fillRect(0, y, els.stage.width, h);
     }
   }
+}
+
+function drawSpeedLines() {
+  if (state.effectId !== "speed") return;
+  ctx.globalAlpha = 0.22;
+  ctx.strokeStyle = "rgba(255,255,255,0.9)";
+  ctx.lineWidth = 2;
+  for (let i = 0; i < 18; i += 1) {
+    const y = rand(0, els.stage.height);
+    const len = rand(50, 180);
+    const startX = rand(-80, els.stage.width);
+    ctx.beginPath();
+    ctx.moveTo(startX, y);
+    ctx.lineTo(startX + len, y + rand(-8, 8));
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
 }
 
 function drawRecordHUD() {
@@ -470,6 +621,7 @@ function render() {
   drawParticles();
   drawOverlays();
   drawGlitchLines();
+  drawSpeedLines();
   drawRecordHUD();
 
   state.renderId = window.requestAnimationFrame(render);
@@ -586,7 +738,7 @@ function ensureSpeechPassive() {
         const text = event.results[i][0].transcript.trim();
         if (!text) continue;
         if (event.results[i].isFinal) {
-          addFloatingText(text, "speech");
+          addFloatingText(text, { source: "speech", sticky: false, styleId: state.textStyleId });
         } else {
           interim += text;
         }
@@ -710,10 +862,68 @@ async function oneTapCreate() {
     return;
   }
 
-  rotateStyle();
+  state.pixelIndex = (state.pixelIndex + 1) % pixelLevels.length;
+  addFloatingText(pick(stickerPhrases), { source: "manual", sticky: true, styleId: state.textStyleId });
   ensureSpeechPassive();
   await recordClipAndSave();
   state.busyAction = false;
+}
+
+function getCanvasPoint(event) {
+  const rect = els.stage.getBoundingClientRect();
+  const scaleX = els.stage.width / rect.width;
+  const scaleY = els.stage.height / rect.height;
+  return {
+    x: (event.clientX - rect.left) * scaleX,
+    y: (event.clientY - rect.top) * scaleY,
+  };
+}
+
+function findOverlayAt(x, y) {
+  for (let i = state.overlays.length - 1; i >= 0; i -= 1) {
+    const t = state.overlays[i];
+    if (!t.hit) continue;
+    if (x >= t.hit.left && x <= t.hit.right && y >= t.hit.top && y <= t.hit.bottom) {
+      return t;
+    }
+  }
+  return null;
+}
+
+function handlePointerDown(event) {
+  const p = getCanvasPoint(event);
+  const target = findOverlayAt(p.x, p.y);
+  if (!target) return;
+
+  state.drag.active = true;
+  state.drag.overlayId = target.id;
+  state.drag.pointerId = event.pointerId;
+  state.drag.offsetX = p.x - target.x;
+  state.drag.offsetY = p.y - target.y;
+  target.sticky = true;
+  target.vx = 0;
+  target.vy = 0;
+  target.maxLife = 999999;
+  target.life = 0;
+  els.stage.setPointerCapture(event.pointerId);
+  setStatus("✋ 拖动中");
+}
+
+function handlePointerMove(event) {
+  if (!state.drag.active || state.drag.pointerId !== event.pointerId) return;
+  const p = getCanvasPoint(event);
+  const target = state.overlays.find((item) => item.id === state.drag.overlayId);
+  if (!target) return;
+  target.x = Math.max(20, Math.min(els.stage.width - 20, p.x - state.drag.offsetX));
+  target.y = Math.max(30, Math.min(els.stage.height - 16, p.y - state.drag.offsetY));
+}
+
+function handlePointerEnd(event) {
+  if (!state.drag.active || state.drag.pointerId !== event.pointerId) return;
+  state.drag.active = false;
+  state.drag.overlayId = null;
+  state.drag.pointerId = null;
+  setStatus("📍 文字已放好");
 }
 
 function loadImageFile(file) {
@@ -761,6 +971,7 @@ function disableUnsupportedControls() {
 
 function bindEvents() {
   els.goBtn.addEventListener("click", oneTapCreate);
+  els.addTextBtn.addEventListener("click", addPresetText);
   els.switchCameraBtn.addEventListener("click", async () => {
     vibrateTap();
     state.facingMode = state.facingMode === "user" ? "environment" : "user";
@@ -784,6 +995,13 @@ function bindEvents() {
     loadVideoFile(file);
     event.target.value = "";
   });
+
+  els.stage.addEventListener("pointerdown", handlePointerDown);
+  els.stage.addEventListener("pointermove", handlePointerMove);
+  els.stage.addEventListener("pointerup", handlePointerEnd);
+  els.stage.addEventListener("pointercancel", handlePointerEnd);
+
+  bindOptionSelections();
 
   window.addEventListener("resize", fitStage, { passive: true });
   window.addEventListener("orientationchange", () => {
@@ -810,14 +1028,14 @@ function bootstrap() {
   render();
 
   if (state.isWeChat) {
-    setStatus("👋 微信里点🪄或先导入素材");
+    setStatus("👋 微信上可选特效+文字，拖动放置");
     return;
   }
   if (state.iPadChrome) {
-    setStatus("👋 iPad Chrome 已优化，点🪄");
+    setStatus("👋 iPad Chrome 已优化，文字可拖动");
     return;
   }
-  setStatus("👋 点🪄自动完成");
+  setStatus("👋 选特效后点🪄，文字可拖动");
 }
 
 bootstrap();
