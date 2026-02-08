@@ -30,6 +30,11 @@ const fxStyles = ["none", "spark", "heart", "glitch", "confetti", "speed"];
 const state = {
   facingMode: "user",
   stream: null,
+  sourceMode: "live",
+  sourceImage: null,
+  sourceVideo: null,
+  sourceVideoUrl: null,
+  sourceVideoDuration: 0,
   chunks: [],
   overlays: [],
   particles: [],
@@ -47,6 +52,7 @@ const state = {
   mediaUrl: null,
   imageUrl: null,
   pending: null,
+  postEditDirty: false,
   micStream: null,
   micRequested: false,
   iPad: /iPad/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1),
@@ -145,6 +151,12 @@ function setActiveOption(container, value, attrName) {
   });
 }
 
+function markPostEditDirty() {
+  if (state.pending) {
+    state.postEditDirty = true;
+  }
+}
+
 function bindOptionSelections() {
   els.effectOptions?.addEventListener("click", (event) => {
     const button = event.target.closest(".opt-btn[data-fx]");
@@ -154,6 +166,7 @@ function bindOptionSelections() {
     state.effectId = fx;
     setActiveOption(els.effectOptions, fx, "data-fx");
     setStatus(`✨ 特效: ${button.textContent}`);
+    markPostEditDirty();
   });
 
   els.textStyleOptions?.addEventListener("click", (event) => {
@@ -164,10 +177,68 @@ function bindOptionSelections() {
     state.textStyleId = styleId;
     setActiveOption(els.textStyleOptions, styleId, "data-text-style");
     setStatus(`🔤 文字: ${button.textContent}`);
+    markPostEditDirty();
   });
 
   setActiveOption(els.effectOptions, state.effectId, "data-fx");
   setActiveOption(els.textStyleOptions, state.textStyleId, "data-text-style");
+}
+
+function clearSourceVideo() {
+  if (state.sourceVideo) {
+    state.sourceVideo.pause();
+    state.sourceVideo.src = "";
+    state.sourceVideo = null;
+  }
+  if (state.sourceVideoUrl) {
+    URL.revokeObjectURL(state.sourceVideoUrl);
+    state.sourceVideoUrl = null;
+  }
+  state.sourceVideoDuration = 0;
+}
+
+async function setSourceToCapturedVideo(blob) {
+  clearSourceVideo();
+  const objectUrl = URL.createObjectURL(blob);
+  const video = document.createElement("video");
+  video.src = objectUrl;
+  video.muted = true;
+  video.playsInline = true;
+  video.loop = true;
+
+  await new Promise((resolve, reject) => {
+    video.onloadeddata = () => resolve();
+    video.onerror = () => reject(new Error("captured video load failed"));
+  }).catch((error) => {
+    console.warn(error);
+  });
+
+  try {
+    await video.play();
+  } catch (error) {
+    console.warn("captured video play blocked", error);
+  }
+
+  state.sourceMode = "capturedVideo";
+  state.sourceVideo = video;
+  state.sourceVideoUrl = objectUrl;
+  state.sourceVideoDuration = Number.isFinite(video.duration) && video.duration > 0 ? video.duration : 0;
+}
+
+async function setSourceToCapturedImage(blob) {
+  const url = URL.createObjectURL(blob);
+  const image = new Image();
+  await new Promise((resolve, reject) => {
+    image.onload = resolve;
+    image.onerror = reject;
+    image.src = url;
+  }).catch((error) => {
+    console.warn("captured image load failed", error);
+  });
+  URL.revokeObjectURL(url);
+  state.sourceMode = "capturedImage";
+  state.sourceImage = image;
+  clearSourceVideo();
 }
 
 async function prepareMicrophone({ silent = false } = {}) {
@@ -248,6 +319,11 @@ async function startCamera() {
     return false;
   }
   state.stream = stream;
+  state.sourceMode = "live";
+  state.sourceImage = null;
+  clearSourceVideo();
+  state.pending = null;
+  state.postEditDirty = false;
   els.camera.srcObject = stream;
   try {
     await els.camera.play();
@@ -290,6 +366,7 @@ function addPresetText() {
   vibrateTap();
   addFloatingText(pick(stickerPhrases), { sticky: true, styleId: state.textStyleId });
   setStatus("➕ 已添加文字，可拖动");
+  markPostEditDirty();
 }
 
 function emitBurst(x, y, color) {
@@ -581,6 +658,12 @@ function drawSourcePixelated(source, targetWidth, targetHeight) {
 }
 
 function resolveRenderSource() {
+  if (state.sourceMode === "capturedVideo" && state.sourceVideo && state.sourceVideo.readyState >= 2) {
+    return state.sourceVideo;
+  }
+  if (state.sourceMode === "capturedImage" && state.sourceImage) {
+    return state.sourceImage;
+  }
   if (els.camera.readyState >= 2) {
     return els.camera;
   }
@@ -641,19 +724,23 @@ function cleanupMediaUrls() {
     URL.revokeObjectURL(state.imageUrl);
     state.imageUrl = null;
   }
+  clearSourceVideo();
 }
 
 function setPending(blob, type) {
   state.pending = { blob, type };
+  state.postEditDirty = false;
   if (type === "video") {
     if (state.mediaUrl) URL.revokeObjectURL(state.mediaUrl);
     state.mediaUrl = URL.createObjectURL(blob);
     els.resultVideo.src = state.mediaUrl;
     els.resultVideo.load();
+    setSourceToCapturedVideo(blob);
   } else {
     if (state.imageUrl) URL.revokeObjectURL(state.imageUrl);
     state.imageUrl = URL.createObjectURL(blob);
     els.resultImage.src = state.imageUrl;
+    setSourceToCapturedImage(blob);
   }
 }
 
@@ -714,6 +801,66 @@ async function snapPhoto(saveImmediately = false) {
   if (saveImmediately) {
     await autoSaveBlob(blob, "image");
   }
+}
+
+async function exportComposedVideoFromCanvas(durationSec) {
+  if (!state.supportRecorder || !state.supportCaptureStream) {
+    return null;
+  }
+
+  const source = resolveRenderSource();
+  if (!source) {
+    return null;
+  }
+
+  if (state.sourceMode === "capturedVideo" && state.sourceVideo) {
+    try {
+      state.sourceVideo.currentTime = 0;
+      await state.sourceVideo.play();
+    } catch (error) {
+      console.warn("captured video restart failed", error);
+    }
+  }
+
+  const canvasStream = els.stage.captureStream(state.iPad ? 22 : 30);
+  const mimeType = pickRecorderMime();
+  let recorder;
+  try {
+    recorder = mimeType
+      ? new MediaRecorder(canvasStream, {
+          mimeType,
+          videoBitsPerSecond: state.iPad ? 1400000 : 2200000,
+        })
+      : new MediaRecorder(canvasStream);
+  } catch (error) {
+    console.warn("compose recorder init failed", error);
+    canvasStream.getTracks().forEach((track) => track.stop());
+    return null;
+  }
+
+  const chunks = [];
+  const done = new Promise((resolve) => {
+    recorder.ondataavailable = (event) => {
+      if (event.data && event.data.size > 0) {
+        chunks.push(event.data);
+      }
+    };
+    recorder.onstop = () => {
+      const blob = new Blob(chunks, { type: mimeType || "video/webm" });
+      canvasStream.getTracks().forEach((track) => track.stop());
+      resolve(blob);
+    };
+  });
+
+  recorder.start(220);
+  const ms = Math.max(1200, Math.min(10000, Math.floor(durationSec * 1000)));
+  window.setTimeout(() => {
+    if (recorder.state !== "inactive") {
+      recorder.stop();
+    }
+  }, ms);
+
+  return done;
 }
 
 function stopRecordProgressLoop() {
@@ -858,6 +1005,28 @@ async function onDoneClick() {
     return;
   }
   if (state.pending) {
+    if (state.pending.type === "video" && state.postEditDirty) {
+      const durationSec = state.sourceVideoDuration > 0 ? Math.min(10, state.sourceVideoDuration) : 4;
+      setStatus("✨ 正在合成特效视频");
+      const composed = await exportComposedVideoFromCanvas(durationSec);
+      if (composed) {
+        setPending(composed, "video");
+        await autoSaveBlob(composed, "video");
+      } else {
+        await autoSaveBlob(state.pending.blob, "video");
+      }
+      return;
+    }
+    if (state.pending.type === "image") {
+      const composedImage = await new Promise((resolve) => els.stage.toBlob(resolve, "image/png", 0.95));
+      if (composedImage) {
+        setPending(composedImage, "image");
+        await autoSaveBlob(composedImage, "image");
+      } else {
+        await autoSaveBlob(state.pending.blob, "image");
+      }
+      return;
+    }
     await autoSaveBlob(state.pending.blob, state.pending.type);
     return;
   }
@@ -918,6 +1087,7 @@ function handleStagePointerEnd(event) {
   state.drag.overlayId = null;
   state.drag.pointerId = null;
   setStatus("📍 文字已放好");
+  markPostEditDirty();
 }
 
 function bindEvents() {
