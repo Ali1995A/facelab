@@ -1,22 +1,17 @@
 const els = {
   startCameraBtn: document.getElementById("startCameraBtn"),
   switchCameraBtn: document.getElementById("switchCameraBtn"),
+  stickerBtn: document.getElementById("stickerBtn"),
+  effectBtn: document.getElementById("effectBtn"),
+  pixelBtn: document.getElementById("pixelBtn"),
+  speechBtn: document.getElementById("speechBtn"),
   snapBtn: document.getElementById("snapBtn"),
+  recordBtn: document.getElementById("recordBtn"),
   uploadImageBtn: document.getElementById("uploadImageBtn"),
   uploadVideoBtn: document.getElementById("uploadVideoBtn"),
   uploadImageInput: document.getElementById("uploadImageInput"),
   uploadVideoInput: document.getElementById("uploadVideoInput"),
   clearBtn: document.getElementById("clearBtn"),
-  pixelRange: document.getElementById("pixelRange"),
-  memeTextSelect: document.getElementById("memeTextSelect"),
-  addMemeTextBtn: document.getElementById("addMemeTextBtn"),
-  effectSelect: document.getElementById("effectSelect"),
-  speechBtn: document.getElementById("speechBtn"),
-  manualTextInput: document.getElementById("manualTextInput"),
-  manualTextBtn: document.getElementById("manualTextBtn"),
-  durationRange: document.getElementById("durationRange"),
-  durationLabel: document.getElementById("durationLabel"),
-  recordBtn: document.getElementById("recordBtn"),
   stage: document.getElementById("stage"),
   camera: document.getElementById("camera"),
   status: document.getElementById("status"),
@@ -35,6 +30,27 @@ const secureLike =
   location.hostname === "localhost" ||
   location.hostname === "127.0.0.1";
 
+const stickerPhrases = [
+  "哇哦",
+  "冲呀",
+  "太可爱啦",
+  "耶",
+  "嘻嘻",
+  "我最棒",
+  "开心到飞起",
+  "biu biu",
+];
+
+const effects = [
+  { id: "none", icon: "✨" },
+  { id: "spark", icon: "🌟" },
+  { id: "heart", icon: "💖" },
+  { id: "glitch", icon: "⚡" },
+];
+
+const pixelLevels = [6, 8, 10, 12];
+const pixelIcons = ["🧊", "🟦", "🟪", "🟫"];
+
 const state = {
   facingMode: "user",
   stream: null,
@@ -45,39 +61,43 @@ const state = {
   recorder: null,
   audioStream: null,
   chunks: [],
-  pixelSize: 8,
   overlays: [],
   particles: [],
-  effect: "none",
   interimText: "",
   speechWanted: false,
   recognition: null,
   recording: false,
+  recordSeconds: 4,
   recordDeadline: 0,
   renderId: 0,
   mediaUrl: null,
   imageUrl: null,
+  effectIndex: 0,
+  pixelIndex: 1,
   iPad: /iPad/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1),
   isWeChat: /micromessenger/.test(lowUA),
-  isIOS: /iphone|ipad|ipod/.test(lowUA) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1),
   isChromeIOS: /crios/.test(lowUA),
   supportLiveCamera: Boolean(navigator.mediaDevices && navigator.mediaDevices.getUserMedia),
   supportSpeech: Boolean(speechClass),
   supportRecorder: Boolean(window.MediaRecorder),
-  supportCaptureStream: typeof HTMLCanvasElement !== "undefined" && typeof HTMLCanvasElement.prototype.captureStream === "function",
+  supportCaptureStream:
+    typeof HTMLCanvasElement !== "undefined" && typeof HTMLCanvasElement.prototype.captureStream === "function",
 };
 
 state.iPadChrome = state.iPad && state.isChromeIOS;
+if (state.iPad) {
+  state.pixelIndex = 2;
+}
 
 const ctx = els.stage.getContext("2d", { alpha: false, desynchronized: true });
 const tinyCanvas = document.createElement("canvas");
 const tinyCtx = tinyCanvas.getContext("2d", { alpha: false });
 
-if (state.iPad) {
-  els.pixelRange.value = "10";
+function vibrateTap() {
+  if (navigator.vibrate) {
+    navigator.vibrate(10);
+  }
 }
-state.pixelSize = Number(els.pixelRange.value);
-els.durationLabel.textContent = `${els.durationRange.value}s`;
 
 function rand(min, max) {
   return Math.random() * (max - min) + min;
@@ -87,50 +107,35 @@ function pick(arr) {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
-function setStatus(text, mode = "info") {
+function setStatus(text, mode = "ok") {
   els.status.textContent = text;
-  els.status.style.borderColor =
-    mode === "error" ? "rgba(255,100,85,0.55)" : "rgba(255,255,255,0.2)";
+  els.status.style.color = mode === "error" ? "#c1382c" : "#2b4968";
 }
 
 function fitStage() {
-  const container = els.stage.parentElement;
-  const containerWidth = Math.max(320, Math.floor(container.clientWidth - 24));
-  const baseWidth = Math.min(containerWidth, state.iPad ? 560 : 720);
-  const width = baseWidth % 2 === 0 ? baseWidth : baseWidth - 1;
-  const height = Math.floor((width * 4) / 3);
-  els.stage.width = width;
+  const parent = els.stage.parentElement;
+  const width = Math.max(320, Math.min(parent.clientWidth - 20, state.iPad ? 620 : 760));
+  const evenWidth = width % 2 === 0 ? width : width - 1;
+  const height = Math.floor((evenWidth * 4) / 3);
+  els.stage.width = evenWidth;
   els.stage.height = height;
 }
 
-function disableUnsupportedControls() {
-  if (!state.supportLiveCamera || !secureLike) {
-    els.startCameraBtn.disabled = true;
-    els.switchCameraBtn.disabled = true;
-  }
-  if (!state.supportSpeech) {
-    els.speechBtn.disabled = true;
-    els.speechBtn.textContent = "语音不可用";
-  }
-  if (!state.supportRecorder || !state.supportCaptureStream) {
-    els.recordBtn.disabled = true;
-  }
+function refreshHint() {
+  const tags = [];
+  if (state.isWeChat) tags.push("微信");
+  if (state.iPadChrome) tags.push("iPad Chrome");
+  if (!secureLike) tags.push("非HTTPS");
+  if (!state.supportSpeech) tags.push("无语音");
+  els.envHint.textContent = tags.length
+    ? `家长提示: ${tags.join(" · ")}，可用拍照/录像导入模式`
+    : "家长提示: 点击🚀开拍，📸拍图，🎬录4秒";
 }
 
-function refreshEnvironmentHint() {
-  const tags = [];
-  if (state.isWeChat) tags.push("微信内浏览器");
-  if (state.iPadChrome) tags.push("iPad Chrome");
-  if (!secureLike) tags.push("非HTTPS环境");
-  if (!state.supportLiveCamera) tags.push("实时摄像头不可用");
-  if (!state.supportSpeech) tags.push("语音识别不可用");
-  if (!state.supportRecorder || !state.supportCaptureStream) tags.push("视频录制受限");
-
-  const modeHint = tags.length ? tags.join(" · ") : "当前浏览器功能完整";
-  const fallbackHint = state.isWeChat
-    ? "微信里建议优先用“拍照导入/录像导入”"
-    : "建议使用 HTTPS，功能更完整";
-  els.envHint.textContent = `${modeHint} | ${fallbackHint}`;
+function updateToolIcons() {
+  els.effectBtn.textContent = effects[state.effectIndex].icon;
+  els.pixelBtn.textContent = pixelIcons[state.pixelIndex];
+  els.speechBtn.textContent = state.speechWanted ? "🛑" : "🎤";
 }
 
 function stopSourceVideo() {
@@ -153,7 +158,7 @@ async function stopCamera() {
   els.camera.srcObject = null;
 }
 
-function resetLiveSource() {
+function clearSourcesToLive() {
   state.sourceMode = "live";
   state.sourceImage = null;
   stopSourceVideo();
@@ -162,22 +167,22 @@ function resetLiveSource() {
 function activateImageSource(image) {
   stopCamera();
   stopSourceVideo();
-  state.sourceImage = image;
   state.sourceMode = "image";
-  setStatus("已导入照片，效果可继续叠加");
+  state.sourceImage = image;
+  setStatus("🖼️ 已装进相机");
 }
 
 function activateVideoSource(video, objectUrl) {
   stopCamera();
   stopSourceVideo();
+  state.sourceMode = "video";
   state.sourceVideo = video;
   state.sourceVideoUrl = objectUrl;
-  state.sourceMode = "video";
-  setStatus("已导入视频，可继续叠加特效并导出");
+  setStatus("🎞️ 已装进相机");
 }
 
 async function getCameraStreamWithFallback() {
-  const requests = [
+  const tries = [
     {
       video: {
         facingMode: { ideal: state.facingMode },
@@ -186,52 +191,44 @@ async function getCameraStreamWithFallback() {
       },
       audio: false,
     },
-    {
-      video: {
-        facingMode: state.facingMode,
-      },
-      audio: false,
-    },
+    { video: { facingMode: state.facingMode }, audio: false },
     { video: true, audio: false },
   ];
-
-  for (const req of requests) {
+  for (const req of tries) {
     try {
       return await navigator.mediaDevices.getUserMedia(req);
     } catch (error) {
-      console.warn("camera try failed", req, error);
+      console.warn("camera request failed", error);
     }
   }
   return null;
 }
 
 async function startCamera() {
+  vibrateTap();
   if (!state.supportLiveCamera) {
-    setStatus("当前浏览器不支持实时摄像头，请用拍照导入", "error");
+    setStatus("⚠️ 不支持实时相机", "error");
     return;
   }
   if (!secureLike) {
-    setStatus("需要 HTTPS 才能调用摄像头", "error");
+    setStatus("⚠️ 需HTTPS才能开相机", "error");
     return;
   }
-
   await stopCamera();
-  resetLiveSource();
-
+  clearSourcesToLive();
   const stream = await getCameraStreamWithFallback();
   if (!stream) {
-    setStatus("无法启动摄像头，请改用拍照导入或录像导入", "error");
+    setStatus("⚠️ 开相机失败，可用🖼️/🎞️", "error");
     return;
   }
-
   state.stream = stream;
   els.camera.srcObject = stream;
   try {
     await els.camera.play();
   } catch (error) {
-    console.warn("camera play blocked", error);
+    console.warn(error);
   }
-  setStatus(`摄像头已启动（${state.facingMode === "user" ? "前置" : "后置"}）`);
+  setStatus(state.facingMode === "user" ? "🤳 前置镜头开启" : "📷 后置镜头开启");
 }
 
 function addFloatingText(text, source = "manual") {
@@ -239,22 +236,43 @@ function addFloatingText(text, source = "manual") {
   const x = rand(80, els.stage.width - 80);
   const y = rand(els.stage.height * 0.55, els.stage.height * 0.9);
   const fontSize = source === "speech" ? rand(24, 34) : rand(28, 44);
-  const colors = ["#ffffff", "#ffe082", "#ffccbc", "#b2f5ea", "#fbcfe8"];
+  const colors = ["#ffffff", "#ffe082", "#ffd8f0", "#baf4ff", "#bde7bd"];
   state.overlays.push({
     text,
     x,
     y,
     vx: rand(-0.35, 0.35),
-    vy: rand(-1.5, -0.6),
+    vy: rand(-1.45, -0.55),
     life: 0,
-    maxLife: rand(130, 210),
+    maxLife: rand(130, 220),
     fontSize,
     color: pick(colors),
   });
-  if (state.overlays.length > 40) {
+  if (state.overlays.length > 44) {
     state.overlays.shift();
   }
-  emitBurst(x, y, pick(["#7dd3ff", "#f8b4b4", "#f9e2a0"]));
+  emitBurst(x, y, pick(["#76dbff", "#ffc0df", "#ffd77f"]));
+}
+
+function addSticker() {
+  vibrateTap();
+  addFloatingText(pick(stickerPhrases), "manual");
+  setStatus("😆 贴纸+1");
+}
+
+function cycleEffect() {
+  vibrateTap();
+  state.effectIndex = (state.effectIndex + 1) % effects.length;
+  updateToolIcons();
+  emitBurst(els.stage.width * 0.5, els.stage.height * 0.45, "#ffd77f");
+  setStatus(`✨ 特效切换 ${effects[state.effectIndex].icon}`);
+}
+
+function cyclePixel() {
+  vibrateTap();
+  state.pixelIndex = (state.pixelIndex + 1) % pixelLevels.length;
+  updateToolIcons();
+  setStatus("🧊 像素风切换");
 }
 
 function emitBurst(x, y, color) {
@@ -265,20 +283,19 @@ function emitBurst(x, y, color) {
       y,
       vx: rand(-1.8, 1.8),
       vy: rand(-1.8, 1.8),
-      size: rand(1.5, 3.4),
+      size: rand(1.4, 3.2),
       life: 0,
-      maxLife: rand(18, 48),
+      maxLife: rand(20, 50),
       color,
     });
   }
 }
 
 function emitEffect() {
-  if (state.effect === "none") {
-    return;
-  }
+  const effect = effects[state.effectIndex].id;
+  if (effect === "none") return;
 
-  if (state.effect === "spark" && Math.random() < 0.65) {
+  if (effect === "spark" && Math.random() < 0.65) {
     state.particles.push({
       shape: "spark",
       x: rand(0, els.stage.width),
@@ -288,11 +305,11 @@ function emitEffect() {
       size: rand(0.8, 2.2),
       life: 0,
       maxLife: rand(25, 80),
-      color: pick(["#7dd3ff", "#f7f7f7", "#9de3d5"]),
+      color: pick(["#7dd3ff", "#ffffff", "#9de3d5"]),
     });
   }
 
-  if (state.effect === "heart" && Math.random() < 0.35) {
+  if (effect === "heart" && Math.random() < 0.35) {
     state.particles.push({
       shape: "heart",
       x: rand(30, els.stage.width - 30),
@@ -306,8 +323,8 @@ function emitEffect() {
     });
   }
 
-  if (state.particles.length > 260) {
-    state.particles.splice(0, state.particles.length - 260);
+  if (state.particles.length > 280) {
+    state.particles.splice(0, state.particles.length - 280);
   }
 }
 
@@ -315,9 +332,7 @@ function drawParticles() {
   const next = [];
   for (const p of state.particles) {
     p.life += 1;
-    if (p.life > p.maxLife) {
-      continue;
-    }
+    if (p.life > p.maxLife) continue;
     p.x += p.vx;
     p.y += p.vy;
     const alpha = 1 - p.life / p.maxLife;
@@ -342,18 +357,16 @@ function drawOverlays() {
   const next = [];
   for (const t of state.overlays) {
     t.life += 1;
-    if (t.life > t.maxLife) {
-      continue;
-    }
+    if (t.life > t.maxLife) continue;
     t.x += t.vx;
     t.y += t.vy;
     t.vx *= 0.997;
     const alpha = 1 - t.life / t.maxLife;
     ctx.globalAlpha = Math.max(0, alpha);
-    ctx.font = `${Math.floor(t.fontSize)}px "ZCOOL KuaiLe","Noto Sans SC",sans-serif`;
+    ctx.font = `${Math.floor(t.fontSize)}px "SF Pro Rounded","PingFang SC",sans-serif`;
     ctx.textAlign = "center";
-    ctx.lineWidth = 5;
-    ctx.strokeStyle = "rgba(0,0,0,0.58)";
+    ctx.lineWidth = 6;
+    ctx.strokeStyle = "rgba(0,0,0,0.35)";
     ctx.fillStyle = t.color;
     ctx.strokeText(t.text, t.x, t.y);
     ctx.fillText(t.text, t.x, t.y);
@@ -363,47 +376,44 @@ function drawOverlays() {
   state.overlays = next;
 
   if (state.interimText) {
-    const label = state.interimText.slice(0, 28);
-    ctx.font = `700 ${Math.floor(els.stage.width * 0.035)}px "Noto Sans SC",sans-serif`;
+    const label = state.interimText.slice(0, 22);
+    ctx.font = `700 ${Math.floor(els.stage.width * 0.04)}px "SF Pro Rounded","PingFang SC",sans-serif`;
     ctx.textAlign = "center";
     const x = els.stage.width / 2;
-    const y = els.stage.height - 26;
-    const width = Math.max(140, ctx.measureText(label).width + 28);
-    const height = 34;
-    ctx.fillStyle = "rgba(0,0,0,0.45)";
-    ctx.fillRect(x - width / 2, y - height + 8, width, height);
-    ctx.fillStyle = "#ffffff";
-    ctx.fillText(label, x, y);
+    const y = els.stage.height - 30;
+    const boxW = Math.max(140, ctx.measureText(label).width + 30);
+    ctx.fillStyle = "rgba(255,255,255,0.76)";
+    ctx.fillRect(x - boxW / 2, y - 32, boxW, 36);
+    ctx.fillStyle = "#1f3f63";
+    ctx.fillText(label, x, y - 6);
   }
 }
 
 function drawGlitchLines() {
-  if (state.effect !== "glitch") {
+  if (effects[state.effectIndex].id !== "glitch") {
     return;
   }
   for (let i = 0; i < 4; i += 1) {
-    if (Math.random() < 0.5) {
+    if (Math.random() < 0.45) {
       const y = rand(0, els.stage.height);
       const h = rand(3, 10);
-      ctx.fillStyle = `rgba(${Math.floor(rand(80, 220))},${Math.floor(rand(120, 240))},255,0.18)`;
+      ctx.fillStyle = `rgba(${Math.floor(rand(120, 255))},${Math.floor(rand(120, 255))},255,0.22)`;
       ctx.fillRect(0, y, els.stage.width, h);
     }
   }
 }
 
 function drawRecordHUD() {
-  if (!state.recording) {
-    return;
-  }
+  if (!state.recording) return;
   const remain = Math.max(0, Math.ceil((state.recordDeadline - Date.now()) / 1000));
-  ctx.fillStyle = "rgba(0,0,0,0.45)";
-  ctx.fillRect(12, 12, 124, 36);
-  ctx.fillStyle = "#ff6b5b";
+  ctx.fillStyle = "rgba(255,255,255,0.72)";
+  ctx.fillRect(12, 12, 104, 36);
+  ctx.fillStyle = "#e64437";
   ctx.beginPath();
   ctx.arc(28, 30, 7, 0, Math.PI * 2);
   ctx.fill();
-  ctx.fillStyle = "#fff";
-  ctx.font = "700 18px Noto Sans SC,sans-serif";
+  ctx.fillStyle = "#1f3f63";
+  ctx.font = "700 18px SF Pro Rounded,sans-serif";
   ctx.textAlign = "left";
   ctx.fillText(`${remain}s`, 42, 36);
 }
@@ -422,14 +432,13 @@ function getSourceDimensions(source) {
 function drawSourcePixelated(source, targetWidth, targetHeight) {
   const dims = getSourceDimensions(source);
   if (!dims) return false;
-
-  const tinyW = Math.max(18, Math.floor(targetWidth / state.pixelSize));
-  const tinyH = Math.max(24, Math.floor(targetHeight / state.pixelSize));
+  const pixel = pixelLevels[state.pixelIndex];
+  const tinyW = Math.max(18, Math.floor(targetWidth / pixel));
+  const tinyH = Math.max(24, Math.floor(targetHeight / pixel));
   if (tinyCanvas.width !== tinyW || tinyCanvas.height !== tinyH) {
     tinyCanvas.width = tinyW;
     tinyCanvas.height = tinyH;
   }
-
   const srcRatio = dims.width / dims.height;
   const dstRatio = targetWidth / targetHeight;
   let sx = 0;
@@ -443,7 +452,6 @@ function drawSourcePixelated(source, targetWidth, targetHeight) {
     sh = Math.floor(dims.width / dstRatio);
     sy = Math.floor((dims.height - sh) / 2);
   }
-
   tinyCtx.drawImage(source, sx, sy, sw, sh, 0, 0, tinyW, tinyH);
   ctx.imageSmoothingEnabled = false;
   ctx.drawImage(tinyCanvas, 0, 0, targetWidth, targetHeight);
@@ -467,18 +475,18 @@ function resolveRenderSource() {
 function render() {
   const w = els.stage.width;
   const h = els.stage.height;
-  ctx.fillStyle = "#111";
+  ctx.fillStyle = "#a9c0dc";
   ctx.fillRect(0, 0, w, h);
 
   const source = resolveRenderSource();
   const drawn = source ? drawSourcePixelated(source, w, h) : false;
   if (!drawn) {
-    ctx.fillStyle = "#22354a";
+    ctx.fillStyle = "#90a8c4";
     ctx.fillRect(0, 0, w, h);
   }
 
   for (let y = 0; y < h; y += 4) {
-    ctx.fillStyle = "rgba(0,0,0,0.08)";
+    ctx.fillStyle = "rgba(0,0,0,0.07)";
     ctx.fillRect(0, y, w, 1);
   }
 
@@ -495,17 +503,15 @@ function pickRecorderMime() {
   if (!window.MediaRecorder || !MediaRecorder.isTypeSupported) {
     return "";
   }
-  const list = [
+  const candidates = [
     "video/mp4;codecs=h264,aac",
     "video/webm;codecs=vp9,opus",
     "video/webm;codecs=vp8,opus",
     "video/webm",
     "video/mp4",
   ];
-  for (const type of list) {
-    if (MediaRecorder.isTypeSupported(type)) {
-      return type;
-    }
+  for (const type of candidates) {
+    if (MediaRecorder.isTypeSupported(type)) return type;
   }
   return "";
 }
@@ -523,70 +529,64 @@ function cleanupMediaUrls() {
 }
 
 async function snapPhoto() {
+  vibrateTap();
   const blob = await new Promise((resolve) => {
     els.stage.toBlob(resolve, "image/png", 0.95);
   });
   if (!blob) {
-    setStatus("拍照失败", "error");
+    setStatus("❌ 拍照失败", "error");
     return;
   }
-  if (state.imageUrl) {
-    URL.revokeObjectURL(state.imageUrl);
-  }
+  if (state.imageUrl) URL.revokeObjectURL(state.imageUrl);
   state.imageUrl = URL.createObjectURL(blob);
-  els.downloadImage.href = state.imageUrl;
-  els.downloadImage.download = `facelab-${Date.now()}.png`;
   els.resultImage.src = state.imageUrl;
-  setStatus("已生成图片，可下载或长按保存");
+  els.downloadImage.href = state.imageUrl;
+  els.downloadImage.download = `facelab-kids-${Date.now()}.png`;
+  setStatus("📸 完成，可点⬇️🖼️");
 }
 
 async function recordClip() {
+  vibrateTap();
   if (!state.supportRecorder || !state.supportCaptureStream) {
-    setStatus("当前浏览器不支持视频录制，可改用拍照导出", "error");
+    setStatus("⚠️ 录制不可用", "error");
     return;
   }
-  if (state.recording) {
-    return;
-  }
-
-  const source = resolveRenderSource();
-  if (!source) {
-    setStatus("请先启动摄像头或导入素材", "error");
+  if (state.recording) return;
+  if (!resolveRenderSource()) {
+    setStatus("⚠️ 先开相机或导入", "error");
     return;
   }
 
-  const seconds = Number(els.durationRange.value);
-  const canvasStream = els.stage.captureStream(state.iPad ? 22 : 30);
-
+  const seconds = state.recordSeconds;
+  const stream = els.stage.captureStream(state.iPad ? 22 : 30);
   try {
     state.audioStream = await navigator.mediaDevices.getUserMedia({
       audio: { echoCancellation: true, noiseSuppression: true },
       video: false,
     });
-    state.audioStream.getAudioTracks().forEach((track) => canvasStream.addTrack(track));
+    state.audioStream.getAudioTracks().forEach((track) => stream.addTrack(track));
   } catch (error) {
-    console.warn("microphone unavailable", error);
+    console.warn("no mic track", error);
   }
 
   const mimeType = pickRecorderMime();
   let recorder;
   try {
     recorder = mimeType
-      ? new MediaRecorder(canvasStream, {
+      ? new MediaRecorder(stream, {
           mimeType,
           videoBitsPerSecond: state.iPad ? 1500000 : 2500000,
         })
-      : new MediaRecorder(canvasStream);
+      : new MediaRecorder(stream);
   } catch (error) {
-    setStatus("录制初始化失败", "error");
-    canvasStream.getTracks().forEach((track) => track.stop());
+    setStatus("❌ 无法录制", "error");
+    stream.getTracks().forEach((track) => track.stop());
     return;
   }
 
   state.chunks = [];
   state.recording = true;
   state.recordDeadline = Date.now() + seconds * 1000;
-  state.recorder = recorder;
 
   recorder.ondataavailable = (event) => {
     if (event.data && event.data.size > 0) {
@@ -596,20 +596,17 @@ async function recordClip() {
 
   recorder.onstop = () => {
     state.recording = false;
-    const blobType = mimeType || "video/webm";
-    const blob = new Blob(state.chunks, { type: blobType });
-    if (state.mediaUrl) {
-      URL.revokeObjectURL(state.mediaUrl);
-    }
+    const blob = new Blob(state.chunks, { type: mimeType || "video/webm" });
+    if (state.mediaUrl) URL.revokeObjectURL(state.mediaUrl);
     state.mediaUrl = URL.createObjectURL(blob);
     const ext = blob.type.includes("mp4") ? "mp4" : "webm";
-    els.downloadVideo.href = state.mediaUrl;
-    els.downloadVideo.download = `facelab-${Date.now()}.${ext}`;
     els.resultVideo.src = state.mediaUrl;
     els.resultVideo.load();
-    setStatus("录制完成，可下载或长按预览保存");
+    els.downloadVideo.href = state.mediaUrl;
+    els.downloadVideo.download = `facelab-kids-${Date.now()}.${ext}`;
+    setStatus("🎬 完成，可点⬇️🎬");
 
-    canvasStream.getTracks().forEach((track) => track.stop());
+    stream.getTracks().forEach((track) => track.stop());
     if (state.audioStream) {
       state.audioStream.getTracks().forEach((track) => track.stop());
       state.audioStream = null;
@@ -617,21 +614,17 @@ async function recordClip() {
   };
 
   recorder.start(220);
-  setStatus(`正在录制 ${seconds}s`);
+  setStatus(`🔴 录制 ${seconds}s`);
   window.setTimeout(() => {
-    if (recorder.state !== "inactive") {
-      recorder.stop();
-    }
+    if (recorder.state !== "inactive") recorder.stop();
   }, seconds * 1000);
 }
 
 function ensureSpeechRecognition() {
   if (!speechClass) {
-    setStatus("语音识别不可用，请使用手动文字", "error");
-    els.manualTextInput.focus();
+    setStatus("⚠️ 没有语音功能", "error");
     return null;
   }
-
   const recognition = new speechClass();
   recognition.lang = "zh-CN";
   recognition.continuous = true;
@@ -651,8 +644,8 @@ function ensureSpeechRecognition() {
     state.interimText = interim;
   };
 
-  recognition.onerror = (event) => {
-    setStatus(`语音识别异常: ${event.error}`, "error");
+  recognition.onerror = () => {
+    setStatus("⚠️ 语音识别异常", "error");
   };
 
   recognition.onend = () => {
@@ -662,61 +655,49 @@ function ensureSpeechRecognition() {
         try {
           recognition.start();
         } catch (error) {
-          console.warn("speech restart failed", error);
+          console.warn(error);
         }
-      }, 280);
+      }, 250);
     }
   };
-
   return recognition;
 }
 
 function toggleSpeech() {
+  vibrateTap();
   if (!state.recognition) {
     state.recognition = ensureSpeechRecognition();
-    if (!state.recognition) {
-      return;
-    }
+    if (!state.recognition) return;
   }
 
   if (!state.speechWanted) {
     state.speechWanted = true;
     try {
       state.recognition.start();
-      els.speechBtn.textContent = "关闭语音转字幕";
-      setStatus("语音识别已开启，说话会生成漂浮字幕");
+      setStatus("🎤 说话会变成漂浮字");
     } catch (error) {
-      setStatus("无法开启语音识别，请使用手动文字", "error");
       state.speechWanted = false;
+      setStatus("⚠️ 语音暂时不可用", "error");
     }
-    return;
+  } else {
+    state.speechWanted = false;
+    try {
+      state.recognition.stop();
+    } catch (error) {
+      console.warn(error);
+    }
+    state.interimText = "";
+    setStatus("🎤 已关闭");
   }
-
-  state.speechWanted = false;
-  try {
-    state.recognition.stop();
-  } catch (error) {
-    console.warn(error);
-  }
-  state.interimText = "";
-  els.speechBtn.textContent = "开启语音转字幕";
-  setStatus("语音识别已关闭");
+  updateToolIcons();
 }
 
 function clearOverlays() {
+  vibrateTap();
   state.overlays = [];
   state.particles = [];
   state.interimText = "";
-  setStatus("文字和特效已清空");
-}
-
-function addManualText() {
-  const value = els.manualTextInput.value.trim();
-  if (!value) {
-    return;
-  }
-  addFloatingText(value, "manual");
-  els.manualTextInput.value = "";
+  setStatus("🧹 清空啦");
 }
 
 function loadImageFile(file) {
@@ -729,7 +710,7 @@ function loadImageFile(file) {
   };
   image.onerror = () => {
     URL.revokeObjectURL(url);
-    setStatus("图片导入失败", "error");
+    setStatus("❌ 图片导入失败", "error");
   };
   image.src = url;
 }
@@ -746,25 +727,50 @@ function loadVideoFile(file) {
     try {
       await video.play();
     } catch (error) {
-      console.warn("video autoplay blocked", error);
+      console.warn("video play blocked", error);
     }
     activateVideoSource(video, objectUrl);
   };
   video.onerror = () => {
     URL.revokeObjectURL(objectUrl);
-    setStatus("视频导入失败", "error");
+    setStatus("❌ 视频导入失败", "error");
   };
+}
+
+function disableUnsupportedControls() {
+  if (!state.supportLiveCamera || !secureLike) {
+    els.startCameraBtn.disabled = true;
+    els.switchCameraBtn.disabled = true;
+  }
+  if (!state.supportSpeech) {
+    els.speechBtn.disabled = true;
+  }
+  if (!state.supportRecorder || !state.supportCaptureStream) {
+    els.recordBtn.disabled = true;
+  }
 }
 
 function bindEvents() {
   els.startCameraBtn.addEventListener("click", startCamera);
   els.switchCameraBtn.addEventListener("click", async () => {
+    vibrateTap();
     state.facingMode = state.facingMode === "user" ? "environment" : "user";
     await startCamera();
   });
+  els.stickerBtn.addEventListener("click", addSticker);
+  els.effectBtn.addEventListener("click", cycleEffect);
+  els.pixelBtn.addEventListener("click", cyclePixel);
+  els.speechBtn.addEventListener("click", toggleSpeech);
   els.snapBtn.addEventListener("click", snapPhoto);
-  els.uploadImageBtn.addEventListener("click", () => els.uploadImageInput.click());
-  els.uploadVideoBtn.addEventListener("click", () => els.uploadVideoInput.click());
+  els.recordBtn.addEventListener("click", recordClip);
+  els.uploadImageBtn.addEventListener("click", () => {
+    vibrateTap();
+    els.uploadImageInput.click();
+  });
+  els.uploadVideoBtn.addEventListener("click", () => {
+    vibrateTap();
+    els.uploadVideoInput.click();
+  });
   els.uploadImageInput.addEventListener("change", (event) => {
     const file = event.target.files && event.target.files[0];
     loadImageFile(file);
@@ -776,27 +782,7 @@ function bindEvents() {
     event.target.value = "";
   });
   els.clearBtn.addEventListener("click", clearOverlays);
-  els.addMemeTextBtn.addEventListener("click", () => {
-    addFloatingText(els.memeTextSelect.value, "manual");
-  });
-  els.manualTextBtn.addEventListener("click", addManualText);
-  els.manualTextInput.addEventListener("keydown", (event) => {
-    if (event.key === "Enter") {
-      event.preventDefault();
-      addManualText();
-    }
-  });
-  els.effectSelect.addEventListener("change", () => {
-    state.effect = els.effectSelect.value;
-  });
-  els.pixelRange.addEventListener("input", () => {
-    state.pixelSize = Number(els.pixelRange.value);
-  });
-  els.durationRange.addEventListener("input", () => {
-    els.durationLabel.textContent = `${els.durationRange.value}s`;
-  });
-  els.speechBtn.addEventListener("click", toggleSpeech);
-  els.recordBtn.addEventListener("click", recordClip);
+
   window.addEventListener("resize", fitStage, { passive: true });
   window.addEventListener("orientationchange", fitStage, { passive: true });
   window.addEventListener("beforeunload", () => {
@@ -812,20 +798,21 @@ function bindEvents() {
 
 function bootstrap() {
   fitStage();
-  refreshEnvironmentHint();
+  refreshHint();
+  updateToolIcons();
   disableUnsupportedControls();
   bindEvents();
   render();
 
   if (state.isWeChat) {
-    setStatus("微信兼容模式：优先使用“拍照导入/录像导入”", "info");
+    setStatus("👋 微信里可直接点🖼️或🎞️");
     return;
   }
   if (state.iPadChrome) {
-    setStatus("iPad Chrome 模式已优化，建议先点“启动摄像头”");
+    setStatus("👋 iPad Chrome 已优化");
     return;
   }
-  setStatus(state.iPad ? "iPad 优化模式已启用，建议先点“启动摄像头”" : "准备就绪，点击“启动摄像头”");
+  setStatus("👋 点🚀开始");
 }
 
 bootstrap();
