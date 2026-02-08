@@ -26,6 +26,7 @@ const stickerPhrases = ["哇哦", "冲呀", "太可爱啦", "耶", "嘻嘻", "�
 const pixelLevels = [2, 3, 4, 5];
 const textStyles = ["classic", "neon", "fire", "candy", "shake"];
 const fxStyles = ["none", "spark", "heart", "glitch", "confetti", "speed"];
+const isIpadChrome = (/iPad/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)) && /crios/.test(lowUA);
 
 const state = {
   facingMode: "user",
@@ -45,6 +46,7 @@ const state = {
   recordMaxMs: 10000,
   recordProgressRaf: 0,
   renderId: 0,
+  lastRenderTs: 0,
   overlaySeq: 1,
   effectId: "none",
   textStyleId: "classic",
@@ -58,6 +60,7 @@ const state = {
   iPad: /iPad/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1),
   isWeChat: /micromessenger/.test(lowUA),
   isChromeIOS: /crios/.test(lowUA),
+  lowPowerMode: isIpadChrome,
   supportLiveCamera: Boolean(navigator.mediaDevices && navigator.mediaDevices.getUserMedia),
   supportRecorder: Boolean(window.MediaRecorder),
   supportCaptureStream:
@@ -77,6 +80,44 @@ const state = {
     offsetY: 0,
   },
 };
+
+state.performance = state.lowPowerMode
+  ? {
+      targetFps: 24,
+      maxParticles: 220,
+      burstCount: 10,
+      sparkSpawnMax: 1,
+      confettiSpawnMax: 1,
+      glitchLines: 4,
+      speedLines: 12,
+      scanlineStep: 7,
+      resizeDebounceMs: 180,
+      exportCaptureFps: 18,
+      exportBitrate: 1150000,
+      composeBitrate: 1050000,
+      maxStageWidthPortrait: 560,
+      maxStageWidthLandscape: 660,
+      imageBlobType: "image/jpeg",
+      imageBlobQuality: 0.9,
+    }
+  : {
+      targetFps: 30,
+      maxParticles: 640,
+      burstCount: 24,
+      sparkSpawnMax: 3,
+      confettiSpawnMax: 3,
+      glitchLines: 10,
+      speedLines: 34,
+      scanlineStep: 4,
+      resizeDebounceMs: 80,
+      exportCaptureFps: 30,
+      exportBitrate: 2500000,
+      composeBitrate: 2200000,
+      maxStageWidthPortrait: 760,
+      maxStageWidthLandscape: 760,
+      imageBlobType: "image/png",
+      imageBlobQuality: 0.95,
+    };
 
 if (state.iPad) {
   state.pixelIndex = 1;
@@ -108,6 +149,8 @@ function setShutterProgress(value0to1) {
   els.shutterWrap.style.setProperty("--progress", `${pct * 100}%`);
 }
 
+let fitStageTimer = 0;
+
 function fitStage() {
   updateLayoutMode();
   const parent = els.stage.parentElement;
@@ -118,7 +161,11 @@ function fitStage() {
     320,
     Math.min(
       parent.clientWidth - 20,
-      state.iPad ? (isLandscape ? 760 : 620) : 760,
+      state.iPad
+        ? (isLandscape
+            ? state.performance.maxStageWidthLandscape
+            : state.performance.maxStageWidthPortrait)
+        : 760,
       maxWidthByHeight
     )
   );
@@ -126,6 +173,18 @@ function fitStage() {
   const height = Math.floor((evenWidth * 4) / 3);
   els.stage.width = evenWidth;
   els.stage.height = height;
+}
+
+function scheduleFitStage() {
+  if (fitStageTimer) {
+    window.clearTimeout(fitStageTimer);
+  }
+  fitStageTimer = window.setTimeout(() => {
+    fitStage();
+    if (state.lowPowerMode) {
+      state.particles = [];
+    }
+  }, state.performance.resizeDebounceMs);
 }
 
 function updateLayoutMode() {
@@ -370,16 +429,16 @@ function addPresetText() {
 }
 
 function emitBurst(x, y, color) {
-  for (let i = 0; i < 24; i += 1) {
+  for (let i = 0; i < state.performance.burstCount; i += 1) {
     state.particles.push({
       shape: "spark",
       x,
       y,
-      vx: rand(-2.6, 2.6),
-      vy: rand(-2.6, 2.6),
-      size: rand(1.8, 4.2),
+      vx: rand(-2.2, 2.2),
+      vy: rand(-2.2, 2.2),
+      size: rand(1.4, 3.6),
       life: 0,
-      maxLife: rand(24, 68),
+      maxLife: rand(20, 56),
       color,
       rotation: 0,
       vr: 0,
@@ -391,7 +450,7 @@ function emitEffect() {
   if (state.effectId === "none") return;
 
   if (state.effectId === "spark" && Math.random() < 0.9) {
-    const spawn = Math.random() < 0.55 ? 3 : 2;
+    const spawn = Math.random() < 0.55 ? state.performance.sparkSpawnMax : 1;
     for (let i = 0; i < spawn; i += 1) {
       state.particles.push({
         shape: Math.random() < 0.35 ? "star" : "spark",
@@ -429,7 +488,7 @@ function emitEffect() {
   }
 
   if (state.effectId === "confetti" && Math.random() < 0.82) {
-    const spawn = Math.random() < 0.5 ? 3 : 2;
+    const spawn = Math.random() < 0.5 ? state.performance.confettiSpawnMax : 1;
     for (let i = 0; i < spawn; i += 1) {
       state.particles.push({
         shape: Math.random() < 0.25 ? "star" : "confetti",
@@ -447,8 +506,8 @@ function emitEffect() {
     }
   }
 
-  if (state.particles.length > 640) {
-    state.particles.splice(0, state.particles.length - 640);
+  if (state.particles.length > state.performance.maxParticles) {
+    state.particles.splice(0, state.particles.length - state.performance.maxParticles);
   }
 }
 
@@ -570,7 +629,7 @@ function drawOverlays() {
 
 function drawGlitchLines() {
   if (state.effectId !== "glitch") return;
-  for (let i = 0; i < 10; i += 1) {
+  for (let i = 0; i < state.performance.glitchLines; i += 1) {
     if (Math.random() < 0.8) {
       const y = rand(0, els.stage.height);
       const h = rand(4, 16);
@@ -584,7 +643,7 @@ function drawGlitchLines() {
 function drawSpeedLines() {
   if (state.effectId !== "speed") return;
   ctx.globalAlpha = 0.34;
-  for (let i = 0; i < 34; i += 1) {
+  for (let i = 0; i < state.performance.speedLines; i += 1) {
     ctx.strokeStyle = Math.random() < 0.25 ? "rgba(255,236,163,0.95)" : "rgba(255,255,255,0.95)";
     ctx.lineWidth = rand(1.4, 4.2);
     const y = rand(0, els.stage.height);
@@ -670,7 +729,14 @@ function resolveRenderSource() {
   return null;
 }
 
-function render() {
+function render(ts = 0) {
+  const frameBudget = 1000 / state.performance.targetFps;
+  if (ts && ts - state.lastRenderTs < frameBudget) {
+    state.renderId = window.requestAnimationFrame(render);
+    return;
+  }
+  state.lastRenderTs = ts || performance.now();
+
   const w = els.stage.width;
   const h = els.stage.height;
   ctx.fillStyle = "#a9c0dc";
@@ -683,7 +749,7 @@ function render() {
     ctx.fillRect(0, 0, w, h);
   }
 
-  for (let y = 0; y < h; y += 4) {
+  for (let y = 0; y < h; y += state.performance.scanlineStep) {
     ctx.fillStyle = "rgba(0,0,0,0.07)";
     ctx.fillRect(0, y, w, 1);
   }
@@ -744,10 +810,20 @@ function setPending(blob, type) {
   }
 }
 
+async function captureCurrentImageBlob() {
+  return new Promise((resolve) => {
+    els.stage.toBlob(
+      resolve,
+      state.performance.imageBlobType,
+      state.performance.imageBlobQuality
+    );
+  });
+}
+
 async function autoSaveBlob(blob, type) {
   const isVideo = type === "video";
   const ts = Date.now();
-  const ext = isVideo ? (blob.type.includes("mp4") ? "mp4" : "webm") : "png";
+  const ext = isVideo ? (blob.type.includes("mp4") ? "mp4" : "webm") : blob.type.includes("jpeg") ? "jpg" : "png";
   const fileName = `facelab-kids-${ts}.${ext}`;
   const mime = blob.type || (isVideo ? "video/webm" : "image/png");
 
@@ -789,9 +865,7 @@ async function autoSaveBlob(blob, type) {
 }
 
 async function snapPhoto(saveImmediately = false) {
-  const blob = await new Promise((resolve) => {
-    els.stage.toBlob(resolve, "image/png", 0.95);
-  });
+  const blob = await captureCurrentImageBlob();
   if (!blob) {
     setStatus("❌ 拍照失败", "error");
     return;
@@ -822,14 +896,14 @@ async function exportComposedVideoFromCanvas(durationSec) {
     }
   }
 
-  const canvasStream = els.stage.captureStream(state.iPad ? 22 : 30);
+  const canvasStream = els.stage.captureStream(state.performance.exportCaptureFps);
   const mimeType = pickRecorderMime();
   let recorder;
   try {
     recorder = mimeType
       ? new MediaRecorder(canvasStream, {
           mimeType,
-          videoBitsPerSecond: state.iPad ? 1400000 : 2200000,
+          videoBitsPerSecond: state.performance.composeBitrate,
         })
       : new MediaRecorder(canvasStream);
   } catch (error) {
@@ -893,7 +967,7 @@ async function startRecording() {
     return;
   }
 
-  const canvasStream = els.stage.captureStream(state.iPad ? 22 : 30);
+  const canvasStream = els.stage.captureStream(state.performance.exportCaptureFps);
   const micReady = await prepareMicrophone({ silent: true });
   if (micReady && state.micStream) {
     state.micStream.getAudioTracks().forEach((track) => canvasStream.addTrack(track));
@@ -907,7 +981,7 @@ async function startRecording() {
     recorder = mimeType
       ? new MediaRecorder(canvasStream, {
           mimeType,
-          videoBitsPerSecond: state.iPad ? 1500000 : 2500000,
+          videoBitsPerSecond: state.performance.exportBitrate,
         })
       : new MediaRecorder(canvasStream);
   } catch (error) {
@@ -1017,8 +1091,8 @@ async function onDoneClick() {
       }
       return;
     }
-    if (state.pending.type === "image") {
-      const composedImage = await new Promise((resolve) => els.stage.toBlob(resolve, "image/png", 0.95));
+    if (state.pending.type === "image" && state.postEditDirty) {
+      const composedImage = await captureCurrentImageBlob();
       if (composedImage) {
         setPending(composedImage, "image");
         await autoSaveBlob(composedImage, "image");
@@ -1116,12 +1190,17 @@ function bindEvents() {
     }
   });
 
-  window.addEventListener("resize", fitStage, { passive: true });
+  window.addEventListener("resize", scheduleFitStage, { passive: true });
   window.addEventListener("orientationchange", () => {
     updateLayoutMode();
-    fitStage();
+    state.lastRenderTs = 0;
+    scheduleFitStage();
   });
   window.addEventListener("beforeunload", () => {
+    if (fitStageTimer) {
+      window.clearTimeout(fitStageTimer);
+      fitStageTimer = 0;
+    }
     stopRecordProgressLoop();
     stopRecording(false);
     cleanupMediaUrls();
