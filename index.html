@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>FaceLab Meme Cam</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=ZCOOL+KuaiLe&family=Noto+Sans+SC:wght@400;700;900&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="topbar">
+        <h1>FaceLab Meme Cam</h1>
+        <p>前置自拍 · 像素风 · 语音漂浮字幕 · 几秒生成表情包</p>
+      </header>
+
+      <section class="panel controls">
+        <button id="startCameraBtn" class="btn primary">启动摄像头</button>
+        <button id="switchCameraBtn" class="btn">切换前/后摄像头</button>
+        <button id="snapBtn" class="btn">拍照</button>
+        <button id="clearBtn" class="btn">清空文字</button>
+
+        <label class="field">
+          <span>像素强度</span>
+          <input id="pixelRange" type="range" min="3" max="14" value="8" />
+        </label>
+
+        <label class="field">
+          <span>表情文字</span>
+          <select id="memeTextSelect">
+            <option>我裂开了</option>
+            <option>离谱但真实</option>
+            <option>绝绝子</option>
+            <option>救命啊</option>
+            <option>今天也要稳住</option>
+            <option>你礼貌吗</option>
+          </select>
+        </label>
+        <button id="addMemeTextBtn" class="btn">添加文字</button>
+
+        <label class="field">
+          <span>特效</span>
+          <select id="effectSelect">
+            <option value="none">无</option>
+            <option value="spark">火花</option>
+            <option value="heart">爱心</option>
+            <option value="glitch">故障线</option>
+          </select>
+        </label>
+
+        <button id="speechBtn" class="btn">开启语音转字幕</button>
+
+        <label class="field">
+          <span>录制时长（秒）</span>
+          <input id="durationRange" type="range" min="3" max="8" value="5" />
+          <strong id="durationLabel">5s</strong>
+        </label>
+        <button id="recordBtn" class="btn danger">录制表情包</button>
+      </section>
+
+      <section class="panel stage-wrap">
+        <canvas id="stage" width="720" height="960"></canvas>
+        <video id="camera" autoplay muted playsinline></video>
+        <div id="status" class="status">等待启动摄像头</div>
+      </section>
+
+      <section class="panel output">
+        <h2>导出结果</h2>
+        <p>iPad: 可长按下方预览，选择“存储到照片”。</p>
+        <div class="actions">
+          <a id="downloadImage" class="btn ghost" download="facelab-meme.png">下载图片</a>
+          <a id="downloadVideo" class="btn ghost" download="facelab-meme-video.webm">下载视频</a>
+        </div>
+        <video id="resultVideo" controls playsinline></video>
+        <img id="resultImage" alt="拍照结果" />
+      </section>
+    </div>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
